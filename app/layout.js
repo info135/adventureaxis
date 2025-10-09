@@ -59,7 +59,7 @@ export default function RootLayout({ children }) {
               {/* <CartSyncOnLogin /> */}
               <SearchProvider>
                 <Header />
-                <GoogleTranslate />
+                {/* <GoogleTranslate /> */}
                 <main>
                   <OverlayButton />
                   {children}

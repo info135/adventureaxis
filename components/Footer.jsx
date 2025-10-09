@@ -83,9 +83,9 @@ const Footer = () => {
                 <div className="flex flex-col gap-1">
                     <h1 className="font-semibold text-xl flex items-center gap-2"> More Inquiry</h1>
                     <div className="flex items-start gap-2">
-                        <Link href={'tel:+9107669280002'} className="my-2 rounded-full py-1 font-barlow text-white flex items-center gap-2">
+                        <Link href={'tel:+917669280002'} className="my-2 rounded-full py-1 font-barlow text-white flex items-center gap-2">
                             <Phone size={20} className="text-blue-600" />
-                            +91 07669280002
+                            +91 7669280002
                         </Link>
                         <Link href={'tel:+919897468886'} className="my-2 rounded-full py-1 font-barlow text-white flex items-center gap-2">
                             +91 9897468886
@@ -96,14 +96,8 @@ const Footer = () => {
                             <Send className="text-blue-600" size={20} />
                         </div>
                         <div className="flex items-start flex-col gap-1 py-2">
-                            <Link href={'mailto:support@adventureaxis.in'} className="rounded-full font-barlow text-white flex items-center gap-2">
-                                support@adventureaxis.in
-                            </Link>
-                            <Link href={'mailto:Accounts@adventureaxis.in'} className=" rounded-full font-barlow text-white flex items-center gap-2">
-                                Accounts@adventureaxis.in
-                            </Link>
-                            <Link href={'mailto:Sales@adventureaxis.in'} className="rounded-full font-barlow text-white flex items-center gap-2">
-                                Sales@adventureaxis.in
+                            <Link href={'mailto:info@adventureaxis.in'} className="rounded-full font-barlow text-white flex items-center gap-2">
+                                info@adventureaxis.in
                             </Link>
                         </div>
                     </div>
@@ -140,9 +134,9 @@ const Footer = () => {
             <div className="md:hidden flex flex-col gap-1 p-5">
                 <h1 className="font-semibold text-xl flex items-center gap-2"> More Inquiry</h1>
                 <div className="flex items-start gap-2">
-                    <Link href={'tel:+9107669280002'} className="my-2 text-sm rounded-full py-1 font-barlow text-white flex items-center gap-2">
+                    <Link href={'tel:+917669280002'} className="my-2 text-sm rounded-full py-1 font-barlow text-white flex items-center gap-2">
                         <Phone size={20} className="text-blue-600" />
-                        +91 07669280002
+                        +91 7669280002
                     </Link>
                     <Link href={'tel:+919897468886'} className="my-2 text-sm rounded-full py-1 font-barlow text-white flex items-center gap-2">
                         +91 9897468886
@@ -155,16 +149,8 @@ const Footer = () => {
                     </div>
                     <div className="flex items-start flex-col gap-1 py-2">
 
-                        <Link href={'mailto:support@adventureaxis.in'} className="text-sm rounded-full font-barlow text-white flex items-center gap-2">
-                            support@adventureaxis.in
-                        </Link>
-                        <Link href={'mailto:Accounts@adventureaxis.in'} className=" text-sm rounded-full font-barlow text-white flex items-center gap-2">
-
-                            Accounts@adventureaxis.in
-                        </Link>
-                        <Link href={'mailto:Sales@adventureaxis.in'} className=" text-sm rounded-full font-barlow text-white flex items-center gap-2">
-
-                            Sales@adventureaxis.in
+                        <Link href={'mailto:info@adventureaxis.in'} className="text-sm rounded-full font-barlow text-white flex items-center gap-2">
+                            info@adventureaxis.in
                         </Link>
                     </div>
                 </div>
@@ -254,14 +240,14 @@ const Footer = () => {
                                     <li>
                                         <strong>8. Bulk or Custom Orders</strong><br />
                                         We welcome bulk purchases or custom requests (e.g., branded adventure kits, expedition gear).<br />
-                                        Contact our team at support@adventureaxis.in for quotations and lead times.
+                                        Contact our team at info@adventureaxis.in for quotations and lead times.
                                     </li>
 
                                     <li>
                                         <strong>9. Customer Support</strong>
                                         <ul className="list-disc list-inside ml-4">
-                                            <li>📧 Email: support@adventureaxis.in</li>
-                                            <li>☎ Call/WhatsApp: +91 07669280002</li>
+                                            <li>📧 Email: info@adventureaxis.in</li>
+                                            <li>☎ Call/WhatsApp: +91 7669280002</li>
                                             <li>🕒 Hours: Monday to Saturday, 10:00 AM – 6:00 PM IST</li>
                                         </ul>
                                     </li>

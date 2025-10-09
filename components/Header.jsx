@@ -1,7 +1,7 @@
 "use client"
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, LogOutIcon, Mail, Phone, Truck, User2Icon } from "lucide-react"
+import { ChevronDown, Globe, LogOutIcon, Mail, Phone, Truck, User2Icon } from "lucide-react"
 import Link from "next/link"
 import MenuBar from "./MenuBar"
 import { Button } from "./ui/button"
@@ -278,7 +278,13 @@ const Header = () => {
                   className="flex items-center p-2 z-55"
                   aria-label="Language"
                 >
-                  <LanguageSelector />
+                  {/* <LanguageSelector /> */}
+                  <Link href={"https://share.google/syyLiHaqdxlgGZoIH"}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                  >
+                  <Globe size={20}/>
+                  </Link>
                 </div>
               </div>
             </div>
