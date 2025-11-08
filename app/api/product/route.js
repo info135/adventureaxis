@@ -54,12 +54,15 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
     const name = searchParams.get('name');
+    const page = parseInt(searchParams.get('page')) || 1;
+    const limit = parseInt(searchParams.get('limit')) || 15; // Default to 15 items per page
+    const skip = (page - 1) * limit;
     // Support direct products filter for ProductProfile page
     const isDirectParam = searchParams.get('isDirect');
     if (id) {
       // Find by MongoDB _id
       const product = await Product.findById(id)
-        
+
         .populate('size')
         // .populate('color')
         .populate('price')
@@ -89,7 +92,7 @@ export async function GET(req) {
     } else if (name) {
       // Fallback to slug search
       const product = await Product.findOne({ slug: name })
-        
+
         .populate('size')
         // .populate('color')
         .populate('price')
@@ -125,7 +128,8 @@ export async function GET(req) {
       // Always filter for active products
       filter.active = true;
       let products = await Product.find(filter)
-       
+        .skip(skip)
+        .limit(limit)
         .populate('price')
         .populate('gallery')
         .populate('video')
@@ -152,8 +156,15 @@ export async function GET(req) {
         }
         return product;
       }));
+      const total = await Product.countDocuments(filter);
 
-      return new Response(JSON.stringify(products), { status: 200 });
+      return new Response(JSON.stringify({
+        products,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }), { status: 200 });
     }
   } catch (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });

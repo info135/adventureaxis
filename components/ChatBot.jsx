@@ -105,21 +105,6 @@ export default function ChatBot() {
   // Load chat history from DB (or localStorage fallback)
   useEffect(() => {
     async function loadHistory() {
-      if (session?.user?.id) {
-        try {
-          const res = await fetch(`/api/getMessages?userId=${session.user.id}`);
-          const data = await res.json();
-
-          if (data.messages && Array.isArray(data.messages)) {
-            setMessages((prev) => (JSON.stringify(prev) !== JSON.stringify(data.messages) ? data.messages : prev));
-            return;
-          } else {
-            setMessages([]);
-          }
-        } catch (error) {
-          setMessages([]);
-        }
-      }
       // fallback to localStorage
       const localHistory = localStorage.getItem("chatbot_history");
       if (localHistory) {
@@ -139,7 +124,7 @@ export default function ChatBot() {
       }
     }
     loadHistory();
-  }, [session?.user?.id]);
+  }, []);
 
 
   const handleResetChat = () => {
@@ -566,7 +551,7 @@ export default function ChatBot() {
                 {productQnA.map((qna) => (
                   <button
                     key={qna.q}
-                    className="flex-1 text-left px-4 py-1 rounded-lg border transition-colors duration-150 font-medium transition"
+                    className="flex-1 text-left px-4 py-1 rounded-lg border transition-colors duration-150 font-medium"
                     onClick={() => handleQnAOption(qna)}
                   >
                     {qna.q}
@@ -625,7 +610,7 @@ export default function ChatBot() {
                   {productQnA.map((qna) => (
                     <button
                       key={qna.q}
-                      className="flex-1 text-left px-4 py-1 rounded-lg border transition-colors duration-150 font-medium transition"
+                      className="flex-1 text-left px-4 py-1 rounded-lg border transition-colors duration-150 font-medium"
                       onClick={() => handleMainMenu(qna)}
                       disabled={loading}
                     >
@@ -670,7 +655,7 @@ export default function ChatBot() {
                   📝 Signup
                 </button>
                 <button
-                  className="w-full text-center px-4 py-2 rounded-lg border transition-colors duration-150 font-medium shadow-sm text-sm transition whitespace-nowrap"
+                  className="w-full text-center px-4 py-2 rounded-lg border transition-colors duration-150 font-medium shadow-sm text-sm whitespace-nowrap"
                   onClick={() => {
                     setLoginPrompt(false);
                     setShowSupportOptions(false);
@@ -722,7 +707,7 @@ export default function ChatBot() {
                   {/* Add Back to Chat button at the end */}
                   <button
                     onClick={handleBackToChat}
-                    className="w-full px-4 py-2 rounded-lg border transition-colors duration-150 font-medium shadow-sm text-xs transition whitespace-nowrap "
+                    className="w-full px-4 py-2 rounded-lg border transition-colors duration-150 font-medium shadow-sm text-xs whitespace-nowrap "
                   >
                     👈 Back to Main Menu
                   </button>

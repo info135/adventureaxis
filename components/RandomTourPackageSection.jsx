@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { CalendarClock, MapPin, Heart, Bookmark, ArrowRight, Globe } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -18,7 +18,7 @@ import QuickViewProductCard from "./QuickViewProductCard";
 import { useCart } from "../context/CartContext";
 import { toast } from "react-hot-toast"
 
-
+import { useInView } from 'react-intersection-observer';
 
 function slugify(text) {
   return text
@@ -56,7 +56,7 @@ const RandomTourPackageSection = () => {
       price: Math.round(discountedPrice),
       size: item?.quantity?.variants[0]?.size,
       weight: item?.quantity?.variants[0]?.weight ? item.quantity.variants[0].weight / 1000 : 0, // Convert grams to kg
-      color:item?.quantity?.variants[0].color,
+      color: item?.quantity?.variants[0].color,
       originalPrice: price,
       qty: 1,
       couponApplied,
@@ -79,7 +79,13 @@ const RandomTourPackageSection = () => {
 
   const [artisan, setArtisan] = useState([])
   const [quickViewProduct, setQuickViewProduct] = useState(null);
-
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const { ref, inView } = useInView({
+    threshold: 0.1,
+    triggerOnce: false
+  });
 
   // Prevent background scroll when Quick View is open
   useEffect(() => {
@@ -115,25 +121,45 @@ const RandomTourPackageSection = () => {
     }
   };
   // Fetch Prouducts
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
+    if (loading || !hasMore) return;
+
+    setLoading(true);
     try {
-      const res = await fetch("/api/product");
-      const data = await res.json();
-      // console.log("Product API response:", data);
+      const response = await fetch(`/api/product?page=${page}&limit=15`);
+      const data = await response.json();
+      // console.log('API Response:', data); // Add this line for debugging
 
-      if (data && data.length > 0) {
-        setProducts(data);
-      } else {
-        setProducts([]);
+      // Ensure we have a valid array of products
+      const products = Array.isArray(data?.products)
+        ? data.products
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      if (products.length === 0) {
+        setHasMore(false);
+        return;
       }
-    } catch (error) {
-      // console.error("Error fetching products:", error);
-      setProducts([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
+      setProducts(prev => {
+        // Ensure we always have an array to spread
+        const currentProducts = Array.isArray(prev) ? prev : [];
+        return [...currentProducts, ...products];
+      });
+      setPage(prev => prev + 1);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [page, loading, hasMore]);
+  useEffect(() => {
+    if (inView && hasMore) {
+      fetchProducts();
+    }
+  }, [inView, hasMore, fetchProducts]);
 
   useEffect(() => {
     fetchArtisan();
@@ -153,7 +179,7 @@ const RandomTourPackageSection = () => {
         {/* Product Section */}
         <div className="w-full py-10 px-2 bg-[#FCF7F1]">
           <h1 className="text-xl md:text-3xl lg:text-4xl font-bold text-center md:mt-10 uppercase">
-          Equip Your Next Adventure.
+            Equip Your Next Adventure.
           </h1>
           <p className=" text-gray-600 py-4 text-center font-barlow md:w-[50%] w-full mx-auto">
             Discover the hottest deals with our Trending Products! Curated
@@ -163,6 +189,7 @@ const RandomTourPackageSection = () => {
           </p>
           <Carousel
             className={`w-full md:w-[95%] mx-auto my-4 ${products.length > 0 ? "block" : "hidden"}`}
+
           >
             <CarouselContent className="w-full gap-2">
               {products.length > 0 &&
@@ -170,6 +197,8 @@ const RandomTourPackageSection = () => {
                   <CarouselItem
                     key={index}
                     className="md:basis-1/2 lg:basis-1/3 xl:basis-1/4 min-w-0 snap-start"
+                    ref={index === products.length - 3 ? ref : null} // Add ref to trigger loading
+
                   >
                     <div className="flex flex-col md:w-[290px]">
                       {/* Image Section */}
@@ -228,7 +257,7 @@ const RandomTourPackageSection = () => {
                                   price: Math.round(discountedPrice),
                                   size: item?.quantity?.variants[0].size,
                                   weight: item?.quantity?.variants[0].weight,
-                                  color:item?.quantity?.variants[0].color,
+                                  color: item?.quantity?.variants[0].color,
                                   originalPrice: price,
                                   qty: 1,
                                   couponApplied,
@@ -338,6 +367,7 @@ const RandomTourPackageSection = () => {
 
 
         {/* Artisan Carousel Section */}
+        {artisan && artisan.length > 0 && (
         <div className="w-full py-10 md:py-20">
           {/* Desktop: Grid/List */}
           <div className="w-full max-w-[90%] mx-auto mb-16">
@@ -347,9 +377,9 @@ const RandomTourPackageSection = () => {
                 <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-start mb-5 uppercase">Our Industry Experts</h2>
                 {/* <h2 className="text-xl font-bold mb-2">Celebrating the Art of Craftsmanship. Honoring the Hands That Shape Beauty</h2> */}
                 <div className="text-md text-gray-700 text-justify mb-6">
-                At the heart of every great expedition is dependable gear—and that’s where we come in. As a leading provider of adventure and expedition equipment, we specialize in supplying high-performance, safety-tested gear for professionals, outdoor enthusiasts, rescue teams, and expedition leaders. Our commitment goes beyond products; we offer end-to-end gear solutions designed for extreme conditions, rugged terrains, and mission-critical operations. Backed by trusted global brands and decades of field experience, our management philosophy focuses on quality, innovation, and reliability. Whether you're preparing for a Himalayan ascent, a wilderness survival course, or a high-altitude rescue mission, we ensure you’re equipped to go further—safely, efficiently, and confidently.
+                  At the heart of every great expedition is dependable gear—and that’s where we come in. As a leading provider of adventure and expedition equipment, we specialize in supplying high-performance, safety-tested gear for professionals, outdoor enthusiasts, rescue teams, and expedition leaders. Our commitment goes beyond products; we offer end-to-end gear solutions designed for extreme conditions, rugged terrains, and mission-critical operations. Backed by trusted global brands and decades of field experience, our management philosophy focuses on quality, innovation, and reliability. Whether you're preparing for a Himalayan ascent, a wilderness survival course, or a high-altitude rescue mission, we ensure you’re equipped to go further—safely, efficiently, and confidently.
                 </div>
-              
+
               </div>
               {/* Right: Top 2 artisan cards in new style */}
               <div className="hidden md:flex flex-row gap-4 justify-end">
@@ -396,8 +426,8 @@ const RandomTourPackageSection = () => {
                   };
                   return (
                     <div key={card.id} className="relative rounded-2xl shadow-md group transition-all h-full w-[340px] flex flex-col bg-[#fbeff2] overflow-hidden">
-                  
-                  
+
+
                       {/* Card Image */}
                       <div className="relative w-full h-96">
                         <img
@@ -464,7 +494,7 @@ const RandomTourPackageSection = () => {
                     {artisan.slice(2).map((item, idx) => {
                       const card = {
                         id: item._id || idx,
-                        slug:item.slug,
+                        slug: item.slug,
                         name: `${item.title ? item.title + " " : ""}${item.firstName || ''} ${item.lastName || ''}`.trim() || "Unknown Artisan",
                         date: item.createdAt ? new Date(item.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase() : "N/A",
                         image: item.profileImage?.url || item.image || "/bg-custom-1.jpg",
@@ -505,8 +535,8 @@ const RandomTourPackageSection = () => {
                       return (
                         <CarouselItem key={card.id} className="pl-5 md:basis-1/2 lg:basis-1/4 min-w-0 snap-start">
                           <div className="relative rounded-2xl overflow-hidden shadow-md group transition-all h-full flex flex-col bg-[#fbeff2]">
-                          
-                        
+
+
                             {/* Card Image */}
                             <div className="relative w-full h-96">
                               <img
@@ -621,7 +651,7 @@ const RandomTourPackageSection = () => {
                       return (
                         <CarouselItem key={card.id} className="pl-5 md:basis-1/2 lg:basis-1/4 min-w-0 snap-start">
                           <div className="relative rounded-2xl overflow-hidden shadow-md group transition-all h-full flex flex-col bg-[#fbeff2]">
-                       
+
                             {/* Card Image */}
                             <div className="relative w-full h-96">
                               <img
@@ -681,14 +711,15 @@ const RandomTourPackageSection = () => {
                     })}
                   </CarouselContent>
                   <div className="flex items-center gap-3 mt-4 justify-center">
-                  <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 p-5" />
-                  <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 p-5" />
+                    <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 p-5" />
+                    <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 p-5" />
                   </div>
                 </Carousel>
               </div>
             )}
           </div>
         </div>
+        )}
 
 
         {/* Quick View Modal */}
