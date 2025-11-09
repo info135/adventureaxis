@@ -126,7 +126,7 @@ const RandomTourPackageSection = () => {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/product?page=${page}&limit=15`);
+      const response = await fetch(`/api/product/limitedProduct?page=${page}&limit=15`);
       const data = await response.json();
       // console.log('API Response:', data); // Add this line for debugging
 
