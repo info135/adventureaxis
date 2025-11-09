@@ -59,7 +59,6 @@ export async function GET(req) {
     if (id) {
       // Find by MongoDB _id
       const product = await Product.findById(id)
-        .populate('artisan')
         .populate('size')
         // .populate('color')
         .populate('price')
@@ -88,7 +87,6 @@ export async function GET(req) {
     } else if (name) {
       // Fallback to slug search
       const product = await Product.findOne({ slug: name })
-        .populate('artisan')
         .populate('size')
         // .populate('color')
         .populate('price')
@@ -123,7 +121,6 @@ export async function GET(req) {
       // Always filter for active products
       filter.active = true;
       let products = await Product.find(filter)
-        .populate('artisan')
         // .populate('size')
         // .populate('color')
         .populate('price')
