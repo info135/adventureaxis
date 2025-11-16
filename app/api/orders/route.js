@@ -114,7 +114,7 @@ export async function POST(req) {
       try {
         const productId = item.productId || item._id;
         if (!productId) {
-          // console.warn('Skipping item with no product ID:', JSON.stringify(item, null, 2));
+          console.warn('Skipping item with no product ID:', JSON.stringify(item, null, 2));
           continue;
         }
         
@@ -139,7 +139,7 @@ export async function POST(req) {
         try {
           const productId = product._id || product.id;
           if (!productId) {
-            // console.warn('Skipping product with no ID:', JSON.stringify(product, null, 2));
+            console.warn('Skipping product with no ID:', JSON.stringify(product, null, 2));
             continue;
           }
           
@@ -192,11 +192,13 @@ export async function POST(req) {
       }
     }
 
-    // console.log('Attempting to update quantities for items:', JSON.stringify(itemsToUpdate, null, 2));
+    // console.log('🔄 Attempting to update quantities for items:', JSON.stringify(itemsToUpdate, null, 2));
 
     if (itemsToUpdate.length > 0) {
       try {
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+        // console.log(`🌐 Calling updateQuantities API at: ${baseUrl}/api/product/updateQuantities`);
+        
         const response = await fetch(`${baseUrl}/api/product/updateQuantities`, {
           method: 'POST',
           headers: {
@@ -205,30 +207,36 @@ export async function POST(req) {
           body: JSON.stringify({ items: itemsToUpdate })
         });
 
-        const responseData = await response.json().catch(() => ({}));
+        const responseData = await response.json().catch((error) => {
+          console.error('❌ Error parsing updateQuantities response:', error);
+          return { error: 'Failed to parse response' };
+        });
         
         if (!response.ok) {
-          // console.error('Failed to update quantities. Status:', response.status);
-          // console.error('Response:', responseData);
+          console.error('❌ Failed to update quantities. Status:', response.status);
+          console.error('Response:', JSON.stringify(responseData, null, 2));
           // Continue with order creation even if quantity update fails
         } else {
-          // console.log('Successfully updated quantities:', responseData);
+          // console.log('✅ Successfully updated quantities:', JSON.stringify(responseData, null, 2));
           if (responseData.results) {
-            responseData.results.forEach(result => {
+            responseData.results.forEach((result, index) => {
               if (result.success) {
-                // console.log(`Updated product ${result.productId}, variant ${result.variantId}: ${result.previousQty} → ${result.newQty}`);
+                // console.log(`✅ [${index}] Updated product ${result.productId}, variant ${result.variantId}: ${result.previousQty} → ${result.newQty}`);
               } else {
-                // console.error(`Failed to update product ${result.productId}, variant ${result.variantId}:`, result.error);
+                // console.error(`❌ [${index}] Failed to update product ${result.productId}, variant ${result.variantId}:`, result.error || 'Unknown error');
               }
             });
           }
         }
       } catch (error) {
-        // console.error('Error in quantity update process:', {
-          // error: error.message,
+        // console.error('❌ Error in quantity update process:', {
+        //   message: error.message,
         //   stack: error.stack,
-        //   name: error.name
+        //   name: error.name,
+        //   itemsBeingProcessed: itemsToUpdate
         // });
+        // Log the error to the server logs as well
+        // console.error('❌ Order creation continuing despite quantity update error. Order will be created but quantities may not be updated.');
       }
     }
 

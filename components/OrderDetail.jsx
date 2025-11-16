@@ -302,8 +302,8 @@ const OrderDetail = ({ order, onBack }) => {
               <div key={index} className="flex flex-col md:flex-row gap-2 items-start justify-between border bg-gray-100 rounded p-2">
                 <div className="flex items-center gap-2">
                   <img
-                    src={product.image}
-                    alt={product.name}
+                    src={product.image ||"/placeholder.jpeg"}
+                    alt={product.name ||"Product Image"}
                     className="w-24 h-24 object-cover rounded-lg border"
                   />
                   <div>

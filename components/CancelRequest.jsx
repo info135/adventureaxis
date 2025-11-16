@@ -41,7 +41,7 @@ const CancelRequest = () => {
               Request No: <span className="text-pink-600 font-bold">#{item.id}</span>
             </span>
             <div className="flex gap-5 items-center">
-              <img src={item.image} alt="product" className="w-20 h-20 rounded-lg border" />
+              <img src={item.image ||"/placeholder.jpeg"} alt="product" className="w-20 h-20 rounded-lg border" />
               <div>
                 <div className="text-[15px] text-gray-700 mb-1">{new Date(item.date).toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" })}</div>
                 <div className="font-bold text-[17px] mb-1">{item.name}</div>

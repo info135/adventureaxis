@@ -92,7 +92,7 @@ const CategoryPage = async ({ params }) => {
         mainCategory={categoryData.mainCategoryTitle || categoryData.title} 
       />
 
-        <div className="flex flex-col md:flex-row w-full mt-4 px-10">
+        <div className="flex flex-col md:flex-row w-full mt-4">
           {/* Left Image Section */}
           <div className="flex flex-col w-72 max-w-xs flex-shrink-0 justify-start items-center">
             {/* Category Advertisement Banner */}

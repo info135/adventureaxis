@@ -20,7 +20,7 @@ async function fetchProducts(query) {
 export default async function SearchPage({ searchParams }) {
   const query = await searchParams?.q || ""
   const products = await fetchProducts(query)
-  console.log(products)
+  // console.log(products)
   
   return (
     <SidebarInset>

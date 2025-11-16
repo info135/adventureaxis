@@ -494,6 +494,21 @@ const CheckOut = () => {
 
         if (verificationData.success) {
           toast.success('Order placed successfully! Invoice sent to your email.');
+          if (buyNowMode) {
+            localStorage.removeItem('buyNowProduct');
+          }
+          else {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem("cart");
+              localStorage.removeItem("checkoutCart");
+              localStorage.removeItem("checkoutData");
+              Object.keys(localStorage).forEach(key => {
+                if (key.startsWith('cart_')) {
+                  localStorage.removeItem(key);
+                }
+              });
+            }
+          }
         } else {
           throw new Error(verificationData.error || 'Payment verification failed');
         }
@@ -559,11 +574,20 @@ const CheckOut = () => {
         setError(null);
         setShowConfirmationModal(true);
         setOrderId(orderId);
-        if (isBuyNow) {
-          localStorage.removeItem("buyNowItem");
-        } else {
-          localStorage.removeItem("checkoutCart");
-          localStorage.removeItem("cart");
+        if (buyNowMode) {
+          localStorage.removeItem('buyNowProduct');
+        }
+        else {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem("cart");
+            localStorage.removeItem("checkoutCart");
+            localStorage.removeItem("checkoutData");
+            Object.keys(localStorage).forEach(key => {
+              if (key.startsWith('cart_')) {
+                localStorage.removeItem(key);
+              }
+            });
+          }
         }
         // 4. Show order overview instead of redirecting
         setShowOverview(true);
@@ -615,7 +639,7 @@ const CheckOut = () => {
                 const res = await fetch('/api/checkShipping', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ 
+                  body: JSON.stringify({
                     weight: totalWeight, // Now in kg
                     weightInGrams: (Number(buyNowProduct.weight) * qty) // Also send in grams for reference
                   }),
@@ -922,7 +946,7 @@ const CheckOut = () => {
   // const [error, setError] = useState(null);
 
 
- 
+
   const [payment, setPayment] = useState('booking_enquiry');
   const [paymentMethod, setPaymentMethod] = useState('booking_enquiry');
   const [agree, setAgree] = useState(false);
@@ -1615,7 +1639,7 @@ const CheckOut = () => {
           setLoading(false);
           return;
         }
-        
+
         // Show enquiry submitted toast first
         toast.success('Enquiry Submitted Successfully!');
         // Add this email sending logic right here:

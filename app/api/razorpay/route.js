@@ -4,6 +4,8 @@ import crypto from "crypto";
 import Order from "@/models/Order"; // Import your Order model
 import connectDB from "@/lib/connectDB";
 import User from "@/models/User";
+import Product from '@/models/Product';
+import { ObjectId } from 'mongodb';
 
 // Validate Razorpay credentials
 if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
@@ -91,7 +93,7 @@ export async function POST(request) {
             );
         }
 
-       
+
 
         // Create Razorpay order
         let razorpayOrder;
@@ -102,13 +104,13 @@ export async function POST(request) {
                 currency: currency.toUpperCase(),
                 receipt: receipt.toString(),
                 notes: {
-                    source: 'Rishikesh HandMade',
+                    source: 'Adventure Axis',
                     customer_email: customer.email
                 }
             });
-      
+
         } catch (razorpayError) {
-           
+
             return NextResponse.json(
                 {
                     error: 'Failed to create payment order',
@@ -237,13 +239,13 @@ export async function POST(request) {
                 throw new Error('At least one product is required');
             }
 
-         
+
 
             // Save to database
             dbOrder = await Order.create(orderData);
 
         } catch (dbErr) {
-            
+
             return NextResponse.json({
                 error: 'Failed to save order in DB',
                 details: process.env.NODE_ENV === 'development' ? dbErr.message : undefined
@@ -286,7 +288,7 @@ export async function PUT(request) {
         // console.log('Signature verification completed');
 
         if (generatedSignature !== razorpay_signature) {
-          
+
             return NextResponse.json(
                 { success: false, error: "Invalid payment signature" },
                 { status: 400 }
@@ -294,7 +296,7 @@ export async function PUT(request) {
         }
 
         // Step 2: Find and update the order
-     
+
         const order = await Order.findOne({
             $or: [
                 { orderId: razorpay_order_id },
@@ -389,7 +391,7 @@ export async function PUT(request) {
             order.promoCode = checkoutData.promoCode || '';
             order.promoDiscount = Number(checkoutData.promoDiscount) || 0;
 
-            
+
         }
 
         // Update customer details if form fields are provided
@@ -421,7 +423,7 @@ export async function PUT(request) {
                     .filter(Boolean)
                     .join(', ');
 
-          
+
         }
 
         // Update user ID if available
@@ -432,9 +434,9 @@ export async function PUT(request) {
 
         try {
             await order.save();
-     
+
         } catch (orderSaveError) {
-      
+
             return NextResponse.json(
                 { success: false, error: "Failed to update order" },
                 { status: 500 }
@@ -468,32 +470,125 @@ export async function PUT(request) {
         order.agree = true; // Always set agree true for online orders (on update)
         await order.save();
 
-        // Update quantities after successful payment
-        try {
-            const products = cart || order.products || [];
-            const itemsToUpdate = products.map(item => ({
-                productId: item.productId || item._id,
-                variantId: item.variantId || 0, // Default to 0 if no variantId
-                quantity: item.quantity || 1
-            })).filter(item => item.productId && item.quantity > 0);
+        // In app/api/razorpay/route.js, find the quantity update section and update it to:
+        const products = Array.isArray(cart) ? cart :
+            (Array.isArray(checkoutData?.cart) ? checkoutData.cart :
+                (Array.isArray(order.products) ? order.products : []));
 
-            if (itemsToUpdate.length > 0) {
-                const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+        const itemsToUpdate = [];
+
+        // Process products
+        for (const product of products) {
+            try {
+                // First try to find the product in the database to get the correct _id
+                let dbProduct;
+                const productId = product.productId || product._id || product.id;
+
+                if (!productId) {
+                    console.warn('Skipping product with no ID:', JSON.stringify(product, null, 2));
+                    continue;
+                }
+
+                // Try to find the product in the database
+                try {
+                    // First try by _id
+                    dbProduct = await Product.findOne({
+                        $or: [
+                            { _id: new ObjectId(productId) },
+                            { _id: productId },
+                            { productId: productId }
+                        ]
+                    });
+
+                    if (!dbProduct) {
+                        console.error('Product not found in database:', {
+                            productId,
+                            availableIds: (await Product.find({}).select('_id productId name').limit(5))
+                        });
+                        continue;
+                    }
+                } catch (dbError) {
+                    console.error('Error finding product:', {
+                        error: dbError.message,
+                        productId,
+                        stack: dbError.stack
+                    });
+                    continue;
+                }
+
+                const qty = Number(product.qty || product.quantity || 1);
+                const size = product.size || null;
+
+                // Handle variants if they exist
+                let variantIndex = 0;
+                if (product.quantity?.variants?.length > 0) {
+                    if (product.variantId !== undefined) {
+                        variantIndex = product.quantity.variants.findIndex(
+                            v => v._id === product.variantId || v.size === product.size
+                        );
+                        if (variantIndex === -1) variantIndex = 0;
+                    }
+                    // If size is specified, find the variant
+                    else if (size) {
+                        variantIndex = product.quantity.variants.findIndex(
+                            v => v.size === size
+                        );
+                        if (variantIndex === -1) variantIndex = 0;
+                    }
+                }
+
+                itemsToUpdate.push({
+                    productId: dbProduct._id, // Use the _id from the database
+                    variantId: variantIndex,
+                    quantity: qty,
+                    size: size,
+                    price: product.price,
+                    discount: product.discount || 0,
+                    total: (product.price || 0) * qty,
+                    image: product.image?.url || product.image || ''
+                });
+
+            } catch (error) {
+                console.error('Error processing product:', {
+                    error: error.message,
+                    product: JSON.stringify(product, null, 2),
+                    stack: error.stack
+                });
+            }
+        }
+
+        // Now update quantities if we have items
+        if (itemsToUpdate.length > 0) {
+            try {
+                const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+                // console.log('Updating quantities for items:', JSON.stringify(itemsToUpdate, null, 2));
+
                 const response = await fetch(`${baseUrl}/api/product/updateQuantities`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
                     },
                     body: JSON.stringify({ items: itemsToUpdate })
                 });
 
-                if (!response.ok) {
-         
-                }
-            }
-        } catch (error) {
+                const responseData = await response.json().catch(() => ({}));
 
-            // Don't fail the payment flow if quantity update fails
+                if (!response.ok) {
+                    console.error('Failed to update quantities:', {
+                        status: response.status,
+                        error: responseData,
+                        items: itemsToUpdate
+                    });
+                } else {
+                    // console.log('Successfully updated quantities:', responseData);
+                }
+            } catch (error) {
+                // console.error('Error in quantity update process:', {
+                //     error: error.message,
+                //     stack: error.stack
+                // });
+            }
         }
 
         // Return user-facing orderId and payment details

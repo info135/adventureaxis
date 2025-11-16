@@ -94,7 +94,7 @@ const Profile = () => {
       <div className="flex flex-col md:flex-row items-center gap-5 mb-6 border-b pb-6">
         <div className="relative">
           <Image
-            src={user.image}
+            src={user.image ||"/placeholder.jpeg"}
             alt="avatar"
             width={96}
             height={96}

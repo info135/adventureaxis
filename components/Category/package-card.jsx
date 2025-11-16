@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext"
 import toast from "react-hot-toast"
 import QuickViewProductCard from "../QuickViewProductCard";
 const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, handleAddToCart }) => {
-  console.log(pkg)
+  // console.log(pkg)
   // If not passed as prop, fallback to context
   const cart = useCart?.() || {}
   const addToWishlistFn = addToWishlist || cart.addToWishlist
@@ -29,7 +29,7 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
   }, [quickViewProduct]);
 
   return (
-    <div className="flex flex-col w-72 rounded-3xl group cursor-pointer">
+    <div className="flex flex-col max-w-80 rounded-3xl group cursor-pointer">
       {/* Image Section */}
       <div className="relative w-full md:h-92 rounded-3xl overflow-hidden flex items-center justify-center group/image border border-gray-300">
         {/* GET 10% OFF Tag */}
@@ -67,7 +67,7 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
         />
         <div className="absolute left-0 right-0 bottom-0 flex items-center justify-center translate-y-10 opacity-0 group-hover/image:translate-y-0 group-hover/image:opacity-100 transition-all duration-300 py-4 ">
           <Button
-            className="bg-black text-white hover:bg-gray-800 tra`nsition-colors duration-300 uppercase text-sm font-bold px-8 py-3 rounded-full shadow-lg border-2 border-white"
+            className="bg-black text-white hover:bg-gray-800 transition-colors duration-300 uppercase text-sm font-bold px-8 py-3 rounded-full shadow-lg border-2 border-white"
             onClick={() => setQuickViewProduct(pkg)}
           >
             QUICK VIEW
@@ -79,7 +79,7 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
       <div className="flex flex-col items-start justify-between px-2 py-4 mt-0">
         <Link
           href={`/product/${pkg.slug}`}
-          className="font-bold hover:underline text-[18px] text-black leading-tight break-words whitespace-normal truncate cursor-pointer"
+          className="font-bold hover:underline text-[15px] md:text-[18px] text-black leading-tight break-words whitespace-normal truncate cursor-pointer"
         >
           {pkg?.title}
         </Link>
@@ -106,13 +106,13 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
             if (hasDiscount && discountedPrice < originalPrice) {
               return (
                 <span>
-                  <span className="font-semibold text-[18px] text-black px-2">₹{formatNumber(Math.round(discountedPrice))}</span>
-                  <del className="text-black font-semibold text-[18px] mr-2">₹{formatNumber(originalPrice)}</del>
+                  <span className="font-semibold text-[15px] md:text-[18px] text-black px-2">₹{formatNumber(Math.round(discountedPrice))}</span>
+                  <del className="text-black font-semibold text-[15px] md:text-[18px] mr-2">₹{formatNumber(originalPrice)}</del>
                 </span>
               );
             } else {
               return (
-                <span className="font-semibold text-[18px] text-black">₹{formatNumber(price)}</span>
+                <span className="font-semibold text-[15px] md:text-[18px] text-black">₹{formatNumber(price)}</span>
               );
             }
           })()}

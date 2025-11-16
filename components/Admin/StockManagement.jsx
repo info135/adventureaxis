@@ -14,7 +14,6 @@ const columns = [
   "Product ID",
   "Price",
   "Stock",
-  "Artisan",
   "Actions"
 ];
 
@@ -529,14 +528,14 @@ const StockManagementPage = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900 line-clamp-1">
+                        <div className="text-sm font-medium text-gray-900 line-clamp-2 w-48 text-wrap">
                           {product.title}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-2 py-4 whitespace-nowrap text-sm text-gray-500">
                         {product.code}
                       </td>
-                      <td className="px-8 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-2 py-4 whitespace-nowrap text-sm text-gray-500">
                       ₹{product.quantity?.variants?.[0].price || 0}
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap">
@@ -547,12 +546,6 @@ const StockManagementPage = () => {
                           )}
                         </div>
                       </td>
-                      <td className="p-3 text-center">{
-                        product.artisan?.name ||
-                        ((product.artisan?.title) + (product.artisan?.firstName || "") + (product.artisan?.lastName ? " " + product.artisan.lastName : "")) ||
-                        product.artisan?.name ||
-                        '-'
-                      }</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
                           <Button

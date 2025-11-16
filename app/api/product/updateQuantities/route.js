@@ -4,15 +4,22 @@ import Quantity from "@/models/Quantity";
 
 export async function POST(req) {
   await connectDB();
-  // console.log('--- Starting quantity update process ---');
+  const requestId = `req-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+  // console.log(`--- Starting quantity update process [${requestId}] ---`);
+  // console.time(`updateQuantities-${requestId}`);
 
   try {
     const { items } = await req.json();
-    // console.log('Received update request with items:', JSON.stringify(items, null, 2));
+    // // console.log(`[${requestId}] Received update request for ${items?.length || 0} items`);
+    
+    // // Log first 3 items for debugging (to avoid huge logs)
+    // if (items?.length > 0) {
+    //   // console.log(`[${requestId}] Sample items (first 3):`, JSON.stringify(items.slice(0, 3), null, 2));
+    // }
 
     if (!Array.isArray(items) || items.length === 0) {
       const error = 'No items provided for quantity update';
-      // console.error(error);
+      // console.error(`[${requestId}] ${error}`);
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -26,13 +33,19 @@ export async function POST(req) {
     const results = [];
 
     for (const [index, item] of items.entries()) {
-      const { productId, variantId = 0, quantity } = item;
-      // console.log(`\nProcessing item ${index + 1}/${items.length}:`, { productId, variantId, quantity });
+      const { productId, variantId = 0, quantity, size } = item;
+      // console.log(`\n[${requestId}] Processing item ${index + 1}/${items.length}:`, { 
+      //   productId, 
+      //   variantId, 
+      //   quantity,
+      //   size,
+      //   item // Log the full item for debugging
+      // });
 
       // Validate required fields
       if (!productId) {
         const error = 'Missing productId';
-        // console.error('Validation failed:', { productId, variantId, quantity, error });
+        // console.error(`[${requestId}] Validation failed:`, { productId, variantId, quantity, error, item });
         results.push({
           productId,
           variantId,
@@ -56,15 +69,61 @@ export async function POST(req) {
 
       try {
         // Find the product
-        const product = await Product.findById(productId);
-        if (!product) {
-          const error = 'Product not found';
-          // console.error(error, { productId });
+        let product;
+        try {
+          product = await Product.findById(productId);
+          if (!product) {
+            // console.error(`[${requestId}] Product not found in database:`, { productId });
+            // Try to find by productId field as fallback
+            product = await Product.findOne({ productId: productId });
+            if (!product) {
+              // console.error(`[${requestId}] Product also not found by productId field:`, { productId });
+              // Try to find by name or other identifier for debugging
+              const itemName = item.name || item.productName || 'Unknown';
+              const similarProducts = await Product.find({
+                $or: [
+                  { name: { $regex: itemName, $options: 'i' } },
+                  { 'productCode': item.productCode || '' }
+                ]
+              }).limit(3);
+              
+              // console.error(`[${requestId}] Similar products found:`, similarProducts.map(p => ({
+              //   _id: p._id,
+              //   name: p.name,
+              //   productCode: p.productCode,
+              //   quantity: p.quantity
+              // })));
+              
+              const error = 'Product not found in database';
+              results.push({
+                productId,
+                variantId,
+                success: false,
+                error,
+                details: {
+                  attemptedId: productId,
+                  similarProducts: similarProducts.map(p => ({
+                    _id: p._id,
+                    name: p.name,
+                    productCode: p.productCode
+                  }))
+                }
+              });
+              continue;
+            }
+          }
+        } catch (dbError) {
+          // console.error(`[${requestId}] Database error when finding product:`, {
+          //   error: dbError.message,
+          //   productId,
+          //   stack: dbError.stack
+          // });
           results.push({
             productId,
             variantId,
             success: false,
-            error
+            error: 'Database error while finding product',
+            details: process.env.NODE_ENV === 'development' ? dbError.message : undefined
           });
           continue;
         }
@@ -171,18 +230,22 @@ export async function POST(req) {
     const successCount = results.filter(r => r.success).length;
     const failureCount = results.length - successCount;
 
-    // console.log(`\n--- Update Summary ---`);
-    // console.log(`Total items: ${results.length}`);
-    // console.log(`Successfully updated: ${successCount}`);
-    // console.log(`Failed to update: ${failureCount}`);
+    // console.log(`\n[${requestId}] --- Update Summary ---`);
+    // console.log(`[${requestId}] Total items: ${results.length}`);
+    // console.log(`[${requestId}] Successfully updated: ${successCount}`);
+    // console.log(`[${requestId}] Failed to update: ${failureCount}`);
+    // console.timeEnd(`updateQuantities-${requestId}`);
     
-    results.forEach((result, index) => {
-      if (result.success) {
-        // console.log(`[${index}] Success: Product ${result.productId}, Variant ${result.variantId}: ${result.previousQty} → ${result.newQty}`);
-      } else {
-        // console.error(`[${index}] Failed: Product ${result.productId || 'N/A'}, Variant ${result.variantId || 'N/A'}: ${result.error || 'Unknown error'}`);
-      }
-    });
+    // results.forEach((result, index) => {
+    //   if (result.success) {
+    //     // console.log(`[${requestId}] [${index}] Success: Product ${result.productId}, Variant ${result.variantId}: ${result.previousQty} → ${result.newQty}`);
+    //   } else {
+    //     // console.error(`[${requestId}] [${index}] Failed: Product ${result.productId || 'N/A'}, Variant ${result.variantId || 'N/A'}: ${result.error || 'Unknown error'}`);
+    //     if (result.details) {
+    //       // console.error(`[${requestId}] [${index}] Failure details:`, result.details);
+    //     }
+    //   }
+    // });
 
     if (allSuccess) {
       const response = {
@@ -228,13 +291,29 @@ export async function POST(req) {
     }
 
   } catch (error) {
-    // console.error('Error in updateQuantities:', error);
+    const errorId = `err-${Date.now()}`;
+    console.error(`[${requestId}] Error in updateQuantities [${errorId}]:`, {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      requestId
+    });
+    
     return new Response(
       JSON.stringify({
         success: false,
-        error: error.message || 'Internal server error'
+        error: `An error occurred while updating quantities. Reference: ${errorId}`,
+        errorId,
+        timestamp: new Date().toISOString(),
+        details: process.env.NODE_ENV === 'development' ? error.message : undefined
       }),
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Error-ID': errorId
+        }
+      }
     );
   }
 }
