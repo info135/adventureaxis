@@ -8,52 +8,16 @@ import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious
 import { Card, CardContent } from "@/components/ui/card";
 import { useCart } from "../context/CartContext";
 import { toast } from "react-hot-toast"
-
-const dummyProducts = [
-  {
-    id: 1,
-    name: "Loremour De Saliduar Cosmopolis",
-    image: "/RandomTourPackageImages/u1.jpg",
-    oldPrice: 140.0,
-    price: 126.0,
-    checked: true,
-  },
-  {
-    id: 2,
-    name: "Dinterdum Condiment Milancelos",
-    image: "/RandomTourPackageImages/u2.jpg",
-    oldPrice: 139.0,
-    price: 89.0,
-    checked: true,
-    priceRange: true,
-    minPrice: 89.0,
-    maxPrice: 139.0,
-  },
-  {
-    id: 3,
-    name: "Magnis Durtarien Aldo Lacinado Pharetas",
-    image: "/RandomTourPackageImages/u3.jpg",
-    oldPrice: 90.0,
-    price: 80.0,
-    checked: true,
-  },
-  {
-    id: 4,
-    name: "Dempus Dortis Delios Nullam Sapiendo",
-    image: "/RandomTourPackageImages/u1.jpg",
-    price: 89.0,
-    checked: true,
-  },
-];
-
+import { useSession } from "next-auth/react"
 
 const ResponsiveFeaturedCarousel = ({ products }) => {
   const { addToCart, addToWishlist, removeFromWishlist, wishlist } = useCart();
+  const { data: session } = useSession();
   // Use products if available and non-empty, otherwise fallback to 3 dummy products
   // console.log(products)
   const displayProducts = Array.isArray(products) && products.length > 0
     ? products
-    : dummyProducts;
+    : [];
 
   // Always keep selected state in sync with displayProducts length
   const [selected, setSelected] = React.useState(() => displayProducts.map((p) => p.checked ?? true));
@@ -69,12 +33,6 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
       return copy;
     });
   };
-
-  // Calculate totals
-  const total = displayProducts.reduce(
-    (sum, p, i) => (selected[i] ? sum + (p.quantity?.variants[0].price || p.minPrice || 0) : sum),
-    0
-  );
   const chunkArray = (arr, size) =>
     Array.from({ length: Math.ceil(arr.length / size) }, (_, i) =>
       arr.slice(i * size, i * size + size)
@@ -85,19 +43,25 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
   const [optionModal, setOptionModal] = React.useState({ open: false, productIdx: null });
   const [selectedColor, setSelectedColor] = React.useState(null);
   const [selectedSize, setSelectedSize] = React.useState(null);
+  const [selectedWeight, setSelectedWeight] = React.useState(null);
+  const [quantity, setQuantity] = React.useState(1);
 
   // Helper to get options for modal
   const getOptions = (product) => {
     // Try product.colors (array of {name, hex}), or variants
     let colors = product.colors || [];
     let sizes = product.sizes || [];
+    let weights = product.weights || [];
     if (!colors.length && product.quantity?.variants) {
       colors = Array.from(new Set(product.quantity.variants.map(v => v.color))).filter(Boolean).map(color => ({ name: color, hex: color }));
     }
     if (!sizes.length && product.quantity?.variants) {
       sizes = Array.from(new Set(product.quantity.variants.map(v => v.size))).filter(Boolean);
     }
-    return { colors, sizes };
+    if (!weights.length && product.quantity?.variants) {
+      weights = Array.from(new Set(product.quantity.variants.map(v => v.weight))).filter(Boolean);
+    }
+    return { colors, sizes, weights };
   };
 
   // Reset modal state on open
@@ -105,6 +69,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
     if (optionModal.open && optionModal.productIdx != null) {
       setSelectedColor(null);
       setSelectedSize(null);
+      setQuantity(1);
     }
   }, [optionModal]);
 
@@ -115,7 +80,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
         (() => {
           const product = displayProducts[optionModal.productIdx];
           if (!product) return null;
-          const { colors, sizes } = getOptions(product);
+          const { colors, sizes, weights } = getOptions(product);
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
               <div className="bg-white rounded-2xl shadow-xl w-[340px] p-6 relative animate-fade-in">
@@ -148,7 +113,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                 {sizes.length > 0 && (
                   <div className="mb-4">
                     <div className="font-semibold text-sm mb-1">Size: {selectedSize || <span className="text-black">Select</span>}</div>
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 flex-wrap">
                       {sizes.map((size, idx) => (
                         <button
                           key={size || idx}
@@ -167,19 +132,57 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                   onClick={() => {
                     // Add to cart with selected options
                     const prod = displayProducts[optionModal.productIdx];
+                    const variants = prod.quantity?.variants || [];
+                    
+                    // Find the selected variant
+                    const selectedVariant = variants.find(v => {
+                      return (
+                        (selectedSize ? v.size === selectedSize : true) &&
+                        (selectedColor ? v.color === selectedColor : true)
+                      );
+                    });
+                    
                     let price = prod.price || prod.minPrice || 0;
                     // Find variant price if available
-                    if (prod.quantity?.variants) {
-                      const variant = prod.quantity.variants.find(v => v.size === selectedSize && (v.color === selectedColor || !selectedColor));
-                      if (variant) price = variant.price;
+                    if (selectedVariant) {
+                      price = selectedVariant.price;
                     }
+                    const cartItemId = `${prod._id}-${selectedSize || ''}-${selectedColor || ''}`.toLowerCase().replace(/\s+/g, '-');
+
+                    // Calculate discount
+                    const coupon = prod.coupon || prod.coupons?.coupon;
+                    let discountedPrice = selectedVariant ? selectedVariant.price : price;
+                    let hasDiscount = false;
+                    if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
+                      discountedPrice = (selectedVariant ? selectedVariant.price : price) - ((selectedVariant ? selectedVariant.price : price) * coupon.percent) / 100;
+                      hasDiscount = true;
+                    } else if (coupon && typeof coupon.amount === 'number' && coupon.amount > 0) {
+                      discountedPrice = (selectedVariant ? selectedVariant.price : price) - coupon.amount;
+                      hasDiscount = true;
+                    }
+
                     addToCart({
-                      id: prod._id || prod.id,
-                      name: prod.title || prod.name,
-                      image: (prod.gallery?.mainImage) || (prod.image?.url) || prod.image || "/placeholder.jpeg",
-                      price,
-                      color: selectedColor,
+                      id: cartItemId, // Use just the product ID as the base ID
+                      productId: prod._id, // Keep original product ID for reference
+                      name: prod.title,
+                      image: (prod.gallery?.mainImage) || (prod.image?.url) || prod.image || "/product.jpeg",
+                      price: hasDiscount ? Math.round(discountedPrice) : selectedVariant.price,
+                      vendorPrice: selectedVariant?.vendorPrice,
+                      originalPrice: selectedVariant.price,
+                      couponApplied: hasDiscount,
+                      couponCode: coupon ? coupon.couponCode : '',
                       size: selectedSize,
+                      weight: selectedWeight,
+                      color: selectedColor,
+                      qty: quantity,
+                      productCode: prod.code || prod.productCode || '',
+                      discountPercent: coupon && typeof coupon.percent === 'number' ? coupon.percent : undefined,
+                      discountAmount: coupon && typeof coupon.amount === 'number' ? coupon.amount : undefined,
+                      cgst: (prod.taxes && prod.taxes.cgst) || prod.cgst || (prod.tax && prod.tax.cgst) || 0,
+                      sgst: (prod.taxes && prod.taxes.sgst) || prod.sgst || (prod.tax && prod.tax.sgst) || 0,
+                      igst: (prod.taxes && prod.taxes.igst) || prod.igst || (prod.tax && prod.tax.igst) || 0,
+                      totalQuantity: selectedVariant.qty || 0,
+                      variantId: selectedVariant._id,
                     }, 1);
                     toast.success('Added to cart!');
                     setOptionModal({ open: false, productIdx: null });
@@ -193,8 +196,8 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
 
       {/* Carousel Section (Left) */}
       <div className="flex-1 w-full md:max-w-[70%] mx-auto flex flex-row items-start">
-         {/* Desktop Carousel: 4 products per row */}
-         <div className="hidden md:flex relative w-full">
+        {/* Desktop Carousel: 4 products per row */}
+        <div className="hidden md:flex relative w-full">
           <Carousel className="w-full">
             <CarouselContent className="w-full gap-2">
               {chunkArray(displayProducts, 4).map((row, rowIdx) => (
@@ -238,10 +241,13 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                                 </span>
                               )}
                               {(() => {
+                                let couponApplied = false;
                                 const price = product.quantity?.variants?.[0]?.price || product.price || product.minPrice || 0;
                                 const coupon = product.coupon || product.coupons?.coupon;
                                 let discountedPrice = price;
-                                let couponApplied = false;
+                                const vendorPrice = product.quantity?.variants?.[0]?.vendorPrice;
+                                const displayPrice = session?.user?.isVendor && vendorPrice ? vendorPrice : price;
+
                                 if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
                                   discountedPrice = price - (price * coupon.percent) / 100;
                                   couponApplied = true;
@@ -254,7 +260,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                                     <span className="text-[19px] font-bold text-black ml-1">₹{Math.round(discountedPrice)?.toLocaleString('en-IN')}</span>
                                   );
                                 } else {
-                                  return <span className="text-[19px] font-bold text-black">₹{price?.toLocaleString('en-IN')}</span>;
+                                  return <span className="text-[19px] font-bold text-black">₹{displayPrice?.toLocaleString('en-IN')}</span>;
                                 }
                               })()}
                             </div>
@@ -275,8 +281,8 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
             <CarouselPrevious className="absolute -left-8 top-1/2 -translate-y-1/2" />
             <CarouselNext className="absolute -right-8 top-1/2 -translate-y-1/2" />
           </Carousel>
-        </div>       
-        
+        </div>
+
         {/* Mobile Carousel: 2 products per row */}
         <div className="flex md:hidden relative w-full">
           <Carousel className="w-full">
@@ -290,7 +296,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                         <div>
                           <div className="w-full h-52 relative mb-3 rounded-xl overflow-hidden flex items-center justify-center bg-gray-50 hover:scale-105 transition-all duration-300">
                             <Image
-                              src={product.gallery?.mainImage?.url || (product.image && product.image.url) || product.image || "/placeholder.jpeg"}
+                              src={product.gallery?.mainImage?.url || (product.image && product.image.url) || product.image || "/product.jpeg"}
                               alt={product.title || product.packageName || "Product image"}
                               width={120}
                               height={120}
@@ -322,10 +328,13 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                                 </span>
                               )}
                               {(() => {
+                                let couponApplied = false;
                                 const price = product.quantity?.variants?.[0]?.price || product.price || product.minPrice || 0;
                                 const coupon = product.coupon || product.coupons?.coupon;
                                 let discountedPrice = price;
-                                let couponApplied = false;
+                                const vendorPrice = product.quantity?.variants?.[0]?.vendorPrice;
+                                const displayPrice = session?.user?.isVendor && vendorPrice ? vendorPrice : price;
+
                                 if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
                                   discountedPrice = price - (price * coupon.percent) / 100;
                                   couponApplied = true;
@@ -338,7 +347,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                                     <span className="text-[17px] font-bold text-black ml-1">₹{Math.round(discountedPrice)?.toLocaleString('en-IN')}</span>
                                   );
                                 } else {
-                                  return <span className="text-[17px] font-bold text-black">₹{price?.toLocaleString('en-IN')}</span>;
+                                  return <span className="text-[17px] font-bold text-black">₹{displayPrice?.toLocaleString('en-IN')}</span>;
                                 }
                               })()}
                             </div>
@@ -361,8 +370,8 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
           </Carousel>
         </div>
 
-       
-    
+
+
       </div>
       {/* Summary Section (Right) */}
       <div className="flex-shrink-0 w-[320px] md:ml-8">
@@ -372,35 +381,41 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
             let originalTotal = 0;
             let discountedTotal = 0;
             let anyDiscount = false;
+
             displayProducts.forEach((product, idx) => {
               if (!selected[idx]) return;
-              const price = product.quantity?.variants?.[0]?.price || product.price || product.minPrice || 0;
+              const price = Number(product.quantity?.variants?.[0]?.price || product.price || product.minPrice || 0);
+              const vendorPrice = Number(product.quantity?.variants?.[0]?.vendorPrice || 0);
+              const displayPrice = session?.user?.isVendor && vendorPrice > 0 ? vendorPrice : price;
               const coupon = product.coupon || product.coupons?.coupon;
-              let discountedPrice = price;
+              let discountedPrice = displayPrice;
+
               if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
-                discountedPrice = price - (price * coupon.percent) / 100;
+                discountedPrice = displayPrice - (displayPrice * coupon.percent) / 100;
                 anyDiscount = true;
               } else if (coupon && typeof coupon.amount === 'number' && coupon.amount > 0) {
-                discountedPrice = price - coupon.amount;
+                discountedPrice = displayPrice - coupon.amount;
                 anyDiscount = true;
               }
-              originalTotal += price;
-              discountedTotal += discountedPrice;
+
+              originalTotal = Number(originalTotal) + Number(price);
+              discountedTotal = Number(discountedTotal) + Number(discountedPrice);
             });
+
+            // Ensure we have valid numbers before formatting
+            const formattedOriginalTotal = isNaN(originalTotal) ? '0.00' : Number(originalTotal).toFixed(2);
+            const formattedDiscountedTotal = isNaN(discountedTotal) ? '0.00' : Number(discountedTotal).toFixed(2);
+
             if (anyDiscount) {
               return (
                 <div className="flex gap-2 items-center mb-2">
-                  <span className="text-gray-400 line-through text-base">₹{originalTotal.toFixed(2)}</span>
-                  <span className="text-xl font-bold text-black">₹{discountedTotal.toFixed(2)}</span>
-                </div>
-              );
-            } else {
-              return (
-                <div className="flex gap-2 items-center mb-2">
-                  <span className="text-xl font-bold text-black">₹{originalTotal.toFixed(2)}</span>
+                  <span className="text-gray-400 line-through text-base">₹{formattedOriginalTotal}</span>
+                  <span className="text-xl font-bold text-black">₹{formattedDiscountedTotal}</span>
                 </div>
               );
             }
+
+            return <span className="text-xl font-bold text-black mb-2">₹{formattedOriginalTotal}</span>;
           })()}
           <button
             className="bg-black text-white w-full py-3 rounded-lg font-bold text-base mb-3 mt-2 hover:bg-gray-900 transition"
@@ -427,7 +442,7 @@ const ResponsiveFeaturedCarousel = ({ products }) => {
                   addToCart({
                     id: p._id || p.id,
                     name: p.title || p.name,
-                    image: (p.gallery?.mainImage) || (p.image?.url) || p.image || "/placeholder.jpeg",
+                    image: (p.gallery?.mainImage) || (p.image?.url) || p.image || "/product.jpeg",
                     price: Math.round(discountedPrice),
                     originalPrice: price,
                     couponApplied,

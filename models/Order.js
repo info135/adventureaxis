@@ -19,11 +19,11 @@ const OrderSchema = new Schema({
         productId: { type: Schema.Types.ObjectId, ref: "Product" },
         id: { type: String },
         name: { type: String, required: true },
-        qty: { type: Number, required: true},
+        qty: { type: Number, required: true },
         price: { type: Number, required: true, min: 0 },
         originalPrice: { type: Number, required: true, min: 0 },
         afterDiscount: { type: Number, required: true, min: 0 },
-        
+
         // Product details
         image: { type: String, required: true },
         color: { type: String, default: '' },
@@ -31,7 +31,7 @@ const OrderSchema = new Schema({
         productCode: { type: String, default: '' },
         weight: { type: Number, default: 0 },
         totalQuantity: { type: Number, default: 0 },
-        
+
         // Tax and pricing
         cgst: { type: Number, default: 0 },
         sgst: { type: Number, default: 0 },
@@ -40,7 +40,20 @@ const OrderSchema = new Schema({
         couponApplied: { type: Boolean, default: false },
         couponCode: { type: String, default: '' }
     }],
-    // Checkout summary fields
+    // Vendor-specific fields
+    isVendorOrder: { type: Boolean, default: false },
+    vendorStatus: {
+        type: String,
+        enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
+        default: 'pending'
+    },
+    orderType: {
+        type: String,
+        enum: ['regular', 'bulk', 'wholesale'],
+        default: 'regular'
+    },
+
+    vendorPrice: { type: Number },
     cartTotal: { type: Number },
     subTotal: { type: Number },
     totalDiscount: { type: Number },

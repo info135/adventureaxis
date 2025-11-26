@@ -91,13 +91,6 @@ const CheckOut = () => {
   const [district, setDistrict] = useState("");
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [orderId, setOrderId] = useState(null);
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
-  const [orderData, setOrderData] = useState(null);
-
-  useEffect(() => {
-    // console.log('[CheckOut] showConfirmationModal:', showConfirmationModal, 'orderId:', orderId);
-  }, [showConfirmationModal, orderId]);
-
   useEffect(() => {
     // Load checkout data from localStorage
     const data = localStorage.getItem("checkoutCart");
@@ -116,6 +109,7 @@ const CheckOut = () => {
   }, []);
 
   const { data: session, status } = useSession();
+  const isVendor = session?.user?.isVendor;
   const router = useRouter();
   const pathname = usePathname();
   const { cart: contextCart, setCart, removeFromCart, clearCart } = useCart();
@@ -239,15 +233,27 @@ const CheckOut = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  ${Array.isArray(products) ? products.map(item => `
+                  ${Array.isArray(products)
+              ? products
+                .map(
+                  (item) => `
                     <tr>
-                      <td><img src="${item.image?.url || item.image || ''}" class="product-img" alt="${item.name || ''}" /></td>
-                      <td>${item.name || 'Product'}</td>
+                      <td><img src="${item.image?.url || item.image || ""
+                    }" class="product-img" alt="${item.name || ""}" /></td>
+                      <td>${item.name || "Product"}</td>
                       <td>${item.qty || 1}</td>
-                      <td>${item.size || '-'}</td>
-                      <td>₹${Number(item.price || 0).toFixed(2)}</td>
+                      <td>${item.size || "-"}</td>
+                          <td>₹${isVendor && item.vendorPrice
+                      ? (Number(item.vendorPrice) * item.qty).toFixed(2)
+                      : (item.price * item.qty).toFixed(2)
+                    }</td>
+    </tr>
                     </tr>
-                  `).join('') : ''}
+                  `
+                )
+                .join("")
+              : ""
+            }
                 </tbody>
               </table>
               <div style="margin-top: 24px; padding: 16px; background: #f9fafb; border-radius: 6px;">
@@ -382,6 +388,20 @@ const CheckOut = () => {
       const customerName = formFields.firstName
         ? `${formFields.firstName} ${formFields.lastName || ''}`.trim()
         : customer.name || '';
+      const isVendor = user?.isVendor;
+      const calculatedAmount = isVendor
+        ? cart.reduce((sum, item) => {
+          const itemPrice = item.vendorPrice
+            ? Number(item.vendorPrice)
+            : item.originalPrice || item.price || 0;
+          const taxRate =
+            ((Number(item.cgst) || 0) + (Number(item.sgst) || 0)) / 100;
+          const itemTotal =
+            (itemPrice + itemPrice * taxRate) * (item.qty || 1);
+          return sum + itemTotal;
+        }, 0) + (checkoutData?.shippingCost || 0)
+        : finalAmount;
+
 
       const customerData = {
         name: customerName,
@@ -404,7 +424,7 @@ const CheckOut = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          amount: Number(finalAmount),
+          amount: Number(calculatedAmount),
           currency: 'INR',
           receipt: generateOrderId(),
           products,
@@ -631,23 +651,25 @@ const CheckOut = () => {
             let totalWeight = 0;
             if (buyNowProduct.weight) {
               // Convert weight from grams to kilograms (divide by 1000)
-              totalWeight = (Number(buyNowProduct.weight) * qty) / 1000;
+              totalWeight = Number(buyNowProduct.weight) * qty;
             }
             // Prefer weight-based shipping if weight exists, else per-qty
             if (totalWeight > 0) {
               try {
-                const res = await fetch('/api/checkShipping', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    weight: totalWeight, // Now in kg
-                    weightInGrams: (Number(buyNowProduct.weight) * qty) // Also send in grams for reference
-                  }),
+                const res = await fetch("/api/checkShipping", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ weight: totalWeight }),
                 });
                 const data = await res.json();
-                if (data && data.available && data.shippingCharge != null && !isNaN(Number(data.shippingCharge))) {
+                if (
+                  data &&
+                  data.available &&
+                  data.shippingCharge != null &&
+                  !isNaN(Number(data.shippingCharge))
+                ) {
                   shippingCost = Number(data.shippingCharge);
-                  shippingTierLabel = data.tierLabel || '';
+                  shippingTierLabel = data.tierLabel || "";
                   shippingPerUnit = data.perUnitCharge || null;
                 } else {
                   shippingCost = 0;
@@ -816,17 +838,6 @@ const CheckOut = () => {
     // Load cart/buy-now data when component mounts or when auth status changes
     loadCartData();
   }, [status]); // Re-run when auth status changes
-  // --- PINCODE CHECK STATE ---
-  const [isPincodeConfirmModalOpen, setIsPincodeConfirmModalOpen] = useState(false);
-  const [statesList, setStatesList] = useState([]);
-  const [pincodeChecked, setPincodeChecked] = useState(false);
-
-  // Fetch states/districts for dropdowns on mount
-  useEffect(() => {
-    fetch('/api/zipcode')
-      .then(res => res.json())
-      .then(data => setStatesList(Array.isArray(data) ? data : []));
-  }, []);
 
   // Promo code apply handler (modeled after CartDetails)
   const handleApplyPromo = async () => {
@@ -1006,16 +1017,24 @@ const CheckOut = () => {
 
     // Calculate totals
     const subTotal = cart.reduce((sum, item) => sum + (item.price || 0) * (item.qty || 1), 0);
-    const totalTax = cart.reduce(
-      (sum, item) => sum + (((item.cgst || 0) + (item.sgst || 0)) / 100) * (item.price || 0) * (item.qty || 1),
-      0
-    );
+    const totalTax = isVendor
+      ? productsPayload.reduce((sum, item) => {
+        const itemTax = ((item.cgst + item.sgst) / 100) * item.price;
+        return sum + itemTax * item.qty;
+      }, 0)
+      : checkoutData.taxTotal;
+
     const shippingCost = subTotal >= 500 ? 0 : 50; // Example shipping logic
     const totalAmount = subTotal + totalTax + shippingCost;
 
     // Generate a unique order ID
     const orderId = generateOrderId();
     const transactionId = orderId;
+    const orderTotal =
+      subTotal +
+      totalTax +
+      checkoutData.shippingCost -
+      (isVendor ? 0 : checkoutData.promoDiscount || 0);
 
     // Prepare products array
     const productsPayload = cart.map(item => {
@@ -1043,7 +1062,10 @@ const CheckOut = () => {
         variantId: variantId,
         name: item.name || 'Product',
         qty: item.qty || 1,
-        price: item.price || 0,
+        price:
+          isVendor && item.vendorPrice
+            ? Number(item.vendorPrice)
+            : item.originalPrice || item.price,
         originalPrice: item.originalPrice || item.price || 0,
 
         // Product details
@@ -1084,6 +1106,8 @@ const CheckOut = () => {
       transactionId: transactionId,
       status: 'Processing',
       agree: true,
+      orderTotal,
+      isVendor,
 
       // Customer details
       firstName: firstName,
@@ -1226,6 +1250,7 @@ const CheckOut = () => {
     if (!phone.trim()) errors.phone = 'Phone number is required';
     if (!street.trim()) errors.street = 'Address is required';
     if (!city.trim()) errors.city = 'City is required';
+    if (!district.trim()) errors.district = "District is required";
     if (!state.trim()) errors.state = 'State is required';
     if (!pincode.trim()) {
       errors.pincode = 'Pincode is required';
@@ -1338,6 +1363,44 @@ const CheckOut = () => {
       catch (error) {
         setError(error.message || 'Failed to create order');
         toast.error(error.message || 'Failed to place order. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    else if (payment === "vendor") {
+      // Handle Cash on Delivery
+      setLoading(true);
+      try {
+        const orderData = prepareOrderData(payment);
+
+        if (isVendor) {
+          // Add vendor-specific data to order
+          orderData.orderType = "bulk";
+          orderData.isVendorOrder = true; // Important for filtering
+          orderData.status = "Bulk Order Requested";
+          orderData.vendorStatus = "pending";
+        }
+
+        const result = await handleCreateOrder(payment, orderData);
+
+        if (result) {
+          // Show success and redirect
+          setShowConfirmationModal(true);
+          setOrderId(result._id || result.orderId);
+          // Clear cart and reset form
+          if (!isVendor) {
+            clearCart();
+          }
+          // Redirect to order confirmation
+          router.push(
+            `/order-confirmation?orderId=${result._id || result.orderId}`
+          );
+        }
+      } catch (error) {
+        setError(error.message || "Failed to create order");
+        toast.error(
+          error.message || "Failed to place order. Please try again."
+        );
       } finally {
         setLoading(false);
       }
@@ -1505,7 +1568,160 @@ const CheckOut = () => {
         // Use regular cart items
         productsToProcess = [...contextCart];
       }
+      if (confirmedPaymentMethod === "vendor") {
+        // Generate order ID and set transaction ID
+        orderId = generateOrderId();
+        transactionId = orderId; // For vendor orders, use orderId as transactionId
+        setPaymentMethod("vendor");
 
+        // Prepare products with vendor pricing
+        const preparedProducts = productsToProcess.map((item) => ({
+          ...item,
+          image:
+            typeof item.image === "string" ? item.image : item.image?.url || "",
+          qty: item.qty || 1,
+          price: item.vendorPrice || item.price || 0,
+          originalPrice: item.price || 0,
+          color: item.color || "",
+          size: item.size || "",
+        }));
+
+        // Calculate shipping cost from multiple possible fields
+        const shippingCost = Number(
+          checkoutData?.shippingCost ||
+          checkoutData?.shipping ||
+          checkoutData?.finalShipping ||
+          0
+        );
+
+        // Calculate tax from items
+        const totalTax = preparedProducts.reduce((sum, item) => {
+          const itemTax =
+            ((item.price * (item.cgst || 0)) / 100 +
+              (item.price * (item.sgst || 0)) / 100) *
+            item.qty;
+          return sum + itemTax;
+        }, 0);
+
+        // Calculate subtotal from items
+        const subTotal = preparedProducts.reduce(
+          (sum, item) => sum + item.price * item.qty,
+          0
+        );
+
+        // Calculate final cart total (subtotal + shipping + tax)
+        const cartTotal = subTotal + shippingCost + totalTax;
+        // Prepare checkout data with all calculated values
+        const updatedCheckoutData = {
+          ...checkoutData,
+          cartTotal: cartTotal,
+          subTotal: subTotal,
+          totalDiscount: 0,
+          totalTax: totalTax,
+          shippingCost: shippingCost,
+          // Ensure these values are numbers
+          totalAmount: cartTotal,
+          finalAmount: cartTotal,
+          grandTotal: cartTotal,
+        };
+
+        // Prepare complete order data
+        const orderData = {
+          ...buildOrderPayload({
+            cart: preparedProducts,
+            checkoutData: updatedCheckoutData,
+            ...formFields,
+            payment: "vendor",
+            paymentMethod: "vendor",
+            paymentMethodValue: "vendor",
+            transactionId,
+            orderId,
+            agree: true,
+            statusValue: "Bulk Order Requested",
+          }),
+          // Vendor-specific fields
+          isVendorOrder: true,
+          vendorStatus: "pending",
+          orderType: "bulk",
+          totalDiscount: 0,
+          promoDiscount: 0,
+          shippingCost: shippingCost,
+          totalTax: totalTax,
+          // Ensure these values are at the root level for the order
+          subTotal: subTotal,
+          cartTotal: cartTotal,
+          grandTotal: cartTotal,
+          totalAmount: cartTotal,
+          promoCode: null,
+          // Include items array
+          items: preparedProducts.map((item) => ({
+            ...item,
+            productId: item._id || item.productId,
+            variantId: item.variantId || 0,
+            quantity: item.qty || 1,
+            price: item.price || 0,
+            total: (item.price || 0) * (item.qty || 1),
+            originalPrice: item.originalPrice || item.price || 0,
+            color: item.color || "",
+            size: item.size || "",
+            weight: item.weight || 0,
+            cgst: item.cgst || 0,
+            sgst: item.sgst || 0,
+          })),
+        };
+        try {
+          // Submit the order
+          const response = await fetch("/api/orders", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(orderData),
+          });
+
+          const result = await response.json();
+
+          if (!response.ok) {
+            throw new Error(result.message || "Failed to create order");
+          }
+
+          // Get the order ID from the response
+          const createdOrderId = result._id || result.orderId || orderId;
+
+          if (!createdOrderId) {
+            console.error("No order ID found in response:", result);
+            toast.error("Error: Could not retrieve order ID");
+            return;
+          }
+
+          // Set order ID and show success modal
+          setOrderId(createdOrderId);
+          setShowConfirmationModal(true);
+          toast.success(
+            "Bulk order request submitted successfully! We will contact you soon."
+          );
+
+          // Clear cart after successful order
+          await clearCart();
+          if (buyNowMode) {
+            localStorage.removeItem("buyNowProduct");
+          } else {
+            if (typeof window !== "undefined") {
+              localStorage.removeItem("cart");
+              localStorage.removeItem("checkoutCart");
+              localStorage.removeItem("checkoutData");
+              Object.keys(localStorage).forEach((key) => {
+                if (key.startsWith("cart_")) {
+                  localStorage.removeItem(key);
+                }
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Error creating order:", error);
+          toast.error(error.message || "Failed to create order");
+          setLoading(false);
+        }
+        return;
+      }
       if (confirmedPaymentMethod === 'booking_enquiry') {
         // Always generate unique orderId for COD using shared generator
         orderId = generateOrderId();
@@ -1977,14 +2193,26 @@ const CheckOut = () => {
                   {formErrors.city && <p className="text-red-500 text-xs mt-1">{formErrors.city}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm mb-1 text-gray-600">Distt.</label>
+                  <label className="block text-sm mb-1 text-gray-600">
+                    Distt.
+                  </label>
                   <input
-                    className="w-full py-2 px-3 bg-gray-100 rounded-md border-0"
+                    className={`w-full py-2 px-3 bg-gray-100 rounded-md ${formErrors.district
+                      ? "border-2 border-red-500"
+                      : "border-0"
+                      }`}
+                    required
                     type="text"
+                    name="district"
                     placeholder="Enter District"
                     value={district}
-                    onChange={e => setDistrict(e.target.value)}
+                    onChange={(e) => setDistrict(e.target.value)}
                   />
+                  {formErrors.district && (
+                    <p className="text-red-500 text-xs mt-1">
+                      {formErrors.district}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm mb-1 text-gray-600">State</label>
@@ -2041,7 +2269,12 @@ const CheckOut = () => {
                         <span className="px-3 py-1 text-base font-semibold">{item.qty}</span>
 
                       </div>
-                      <div className="text-md text-black font-semibold whitespace-nowrap">₹{(item.originalPrice).toFixed(2)}</div>
+                      <div className="text-md text-black font-semibold whitespace-nowrap">₹             {Number(
+                          isVendor && item.vendorPrice
+                            ? item.vendorPrice
+                            : item.originalPrice || item.price || 0
+                        ).toFixed(2)}
+                      </div>
                     </div>
                     <div className="flex justify-between items-center text-sm mb-2">
                       <span className="text-gray-600">CGST ({item.cgst}%)</span>
@@ -2075,311 +2308,311 @@ const CheckOut = () => {
                   </button>
                 </div>
               ))}
-            </div>
+          </div>
 
-            <div className="bg-gray-50 p-3 rounded-md mb-4">
-              <div className="flex justify-between items-center text-sm mb-2">
-                <span className="text-gray-600">Subtotal <span className="text-xs text-gray-400">(MRP)</span></span>
-                <span>₹{checkoutData.subTotal?.toFixed(2)}</span>
-              </div>
-              <div className="text-xs text-red-500 mb-1">Subtotal does not include applicable taxes</div>
-              <div className="flex justify-between items-center text-sm mb-2">
-                <span className="text-gray-600">Discount Amount</span>
-                <span className="text-green-600">-₹{checkoutData.totalDiscount?.toFixed(2)}</span>
-              </div>
-              {checkoutData.couponApplied && (
-                <div className="flex justify-between items-center text-sm mb-2">
-                  <span className="text-gray-600">Coupon <span className="text-xs text-green-600">({checkoutData.coupon.code})</span></span>
-                  <span className="text-green-600">-₹{checkoutData.coupon.discount?.toFixed(2)}</span>
-                </div>
-              )}
-              <div className="border-t border-gray-200 my-2"></div>
-              {(checkoutData.totalDiscount > 0 || (checkoutData.promo && checkoutData.promo.discount > 0)) && (
-                <div className="flex items-center text-green-700 font-semibold text-base mb-2">
-                  Nice! You saved <span className="mx-1">₹ {checkoutData.totalDiscount?.toFixed(2)}</span> on your order.
-                </div>
-              )}
-              <div className="text-xs text-gray-500 mb-2">Note : If discount promo code already applied extra additional coupon not applicable</div>
-            </div>
-            {checkoutData?.shippingCost !== undefined && (
-              <div className="flex justify-between items-center mt-2">
-                <span className="font-semibold">
-                  Shipping Charges{checkoutData.shippingTierLabel ? ` (${checkoutData.shippingTierLabel})` : ''}
-                </span>
-                <span className="font-semibold">
-                  ₹{Number(checkoutData.shippingCost).toFixed(2)}
-                </span>
-              </div>
-            )}
+        <div className="bg-gray-50 p-3 rounded-md mb-4">
+          <div className="flex justify-between items-center text-sm mb-2">
+            <span className="text-gray-600">Subtotal <span className="text-xs text-gray-400">(MRP)</span></span>
+            <span>₹{checkoutData.subTotal?.toFixed(2)}</span>
+          </div>
+          <div className="text-xs text-red-500 mb-1">Subtotal does not include applicable taxes</div>
+          <div className="flex justify-between items-center text-sm mb-2">
+            <span className="text-gray-600">Discount Amount</span>
+            <span className="text-green-600">-₹{checkoutData.totalDiscount?.toFixed(2)}</span>
+          </div>
+          {checkoutData.couponApplied && (
             <div className="flex justify-between items-center text-sm mb-2">
-              <span className="text-gray-600">Shipping Charges</span>
-              <span>₹{Number(checkoutData?.shipping || 0).toFixed(2)}</span>
+              <span className="text-gray-600">Coupon <span className="text-xs text-green-600">({checkoutData.coupon.code})</span></span>
+              <span className="text-green-600">-₹{checkoutData.coupon.discount?.toFixed(2)}</span>
             </div>
-            {(() => {
-              const totalCGST = checkoutData.cart.reduce(
-                (sum, item) => sum + ((item.price * item.cgst / 100) * item.qty),
-                0
-              );
-              const totalSGST = checkoutData.cart.reduce(
-                (sum, item) => sum + ((item.price * item.sgst / 100) * item.qty),
-                0
-              );
-              return (
-                <>
-                  <div className="flex justify-between items-center text-sm mb-2">
-                    <span className="text-gray-600">Total CGST</span>
-                    <span>₹{totalCGST.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-sm mb-2">
-                    <span className="text-gray-600">Total SGST</span>
-                    <span>₹{totalSGST.toFixed(2)}</span>
-                  </div>
-                </>
-              );
-            })()}
+          )}
+          <div className="border-t border-gray-200 my-2"></div>
+          {(checkoutData.totalDiscount > 0 || (checkoutData.promo && checkoutData.promo.discount > 0)) && (
+            <div className="flex items-center text-green-700 font-semibold text-base mb-2">
+              Nice! You saved <span className="mx-1">₹ {checkoutData.totalDiscount?.toFixed(2)}</span> on your order.
+            </div>
+          )}
+          <div className="text-xs text-gray-500 mb-2">Note : If discount promo code already applied extra additional coupon not applicable</div>
+        </div>
+        {checkoutData?.shippingCost !== undefined && (
+          <div className="flex justify-between items-center mt-2">
+            <span className="font-semibold">
+              Shipping Charges{checkoutData.shippingTierLabel ? ` (${checkoutData.shippingTierLabel})` : ''}
+            </span>
+            <span className="font-semibold">
+              ₹{Number(checkoutData.shippingCost).toFixed(2)}
+            </span>
+          </div>
+        )}
+        <div className="flex justify-between items-center text-sm mb-2">
+          <span className="text-gray-600">Shipping Charges</span>
+          <span>₹{Number(checkoutData?.shipping || 0).toFixed(2)}</span>
+        </div>
+        {(() => {
+          const totalCGST = checkoutData.cart.reduce(
+            (sum, item) => sum + ((item.price * item.cgst / 100) * item.qty),
+            0
+          );
+          const totalSGST = checkoutData.cart.reduce(
+            (sum, item) => sum + ((item.price * item.sgst / 100) * item.qty),
+            0
+          );
+          return (
+            <>
+              <div className="flex justify-between items-center text-sm mb-2">
+                <span className="text-gray-600">Total CGST</span>
+                <span>₹{totalCGST.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm mb-2">
+                <span className="text-gray-600">Total SGST</span>
+                <span>₹{totalSGST.toFixed(2)}</span>
+              </div>
+            </>
+          );
+        })()}
 
-            <div className="border-t border-gray-200 pt-3 mb-4">
-              <div className="flex justify-between items-center font-bold text-lg">
-                <span>Final Amount</span>
-                <span>₹{checkoutData.cartTotal?.toFixed(2)}</span>
+        <div className="border-t border-gray-200 pt-3 mb-4">
+          <div className="flex justify-between items-center font-bold text-lg">
+            <span>Final Amount</span>
+            <span>₹{checkoutData.cartTotal?.toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-2">Have a promo code?</label>
+          {appliedPromo && (
+            <div className="text-green-700 text-xs mt-1">
+              Promo code "{appliedPromo}" applied successfully!
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              className="border rounded px-3 py-2 flex-1 text-sm bg-blue-50"
+              placeholder="Apply Promo Code"
+              value={couponInput}
+              onChange={e => {
+                setCouponInput(e.target.value);
+                setCouponError("");
+              }}
+              disabled={loadingCoupon || !!appliedPromo}
+            />
+            <button
+              className="px-4 py-2 bg-blue-500 text-white rounded font-semibold text-sm disabled:opacity-60"
+              onClick={handleApplyPromo}
+              disabled={loadingCoupon || !couponInput.trim() || !!appliedPromo}
+              type="button"
+            >
+              {loadingCoupon ? "Applying..." : "Apply"}
+            </button>
+          </div>
+          {couponError && <div className="text-red-600 text-xs mt-1">{couponError}</div>}
+        </div>
+
+        <div className="mb-6">
+          <h3 className="font-medium mb-3">Payment Method</h3>
+          {checkoutData?.cartTotal > 499999 ? (
+            <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700">
+                    For orders exceeding ₹4,99,999, the cart will not support direct checkout due to high-value transaction protocols.
+                    Please contact us for a personalized quote and assistance.
+                  </p>
+                </div>
               </div>
             </div>
-
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Have a promo code?</label>
-              {appliedPromo && (
-                <div className="text-green-700 text-xs mt-1">
-                  Promo code "{appliedPromo}" applied successfully!
-                </div>
-              )}
-              <div className="flex gap-2">
+          ) : (
+            <div className="space-y-3 mb-4">
+              <label
+                className="flex items-center p-3 border rounded-md cursor-pointer border-black"
+              >
                 <input
-                  className="border rounded px-3 py-2 flex-1 text-sm bg-blue-50"
-                  placeholder="Apply Promo Code"
-                  value={couponInput}
-                  onChange={e => {
-                    setCouponInput(e.target.value);
-                    setCouponError("");
+                  type="radio"
+                  name="payment"
+                  value="online"
+                  checked={payment === 'online'}
+                  onChange={(e) => {
+                    setPayment('online');
+                    setPaymentMethod('online');
                   }}
-                  disabled={loadingCoupon || !!appliedPromo}
+                  className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 mr-3"
                 />
+                <div className="flex-1">
+                  <div className="font-medium text-gray-900">Online Payment</div>
+                  <p className="text-sm text-gray-500 mt-1">Pay securely with cards, UPI, or net banking</p>
+                </div>
+              </label>
+
+              <div className="flex items-center gap-2 mt-4">
+                <span className="text-sm text-gray-600">100% Secure Payment</span>
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <img src="/visa-img.png" alt="Visa" className="h-4" />
+                <img src="/master-card.png" alt="Mastercard" className="h-4" />
+                <img src="/rupay.png" alt="Rupay" className="h-4" />
+                <img src="/upi.png" alt="UPI" className="h-4" />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">We accept all major credit/debit cards, UPI, and Netbanking.</p>
+            </div>
+          )}
+        </div>
+
+        {showEnquiryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Enquiry Form</h3>
                 <button
-                  className="px-4 py-2 bg-blue-500 text-white rounded font-semibold text-sm disabled:opacity-60"
-                  onClick={handleApplyPromo}
-                  disabled={loadingCoupon || !couponInput.trim() || !!appliedPromo}
-                  type="button"
+                  onClick={() => setShowEnquiryModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                  disabled={isSubmittingEnquiry}
                 >
-                  {loadingCoupon ? "Applying..." : "Apply"}
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
                 </button>
               </div>
-              {couponError && <div className="text-red-600 text-xs mt-1">{couponError}</div>}
-            </div>
-
-            <div className="mb-6">
-              <h3 className="font-medium mb-3">Payment Method</h3>
-              {checkoutData?.cartTotal > 499999 ? (
-                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <p className="text-sm text-yellow-700">
-                        For orders exceeding ₹4,99,999, the cart will not support direct checkout due to high-value transaction protocols.
-                        Please contact us for a personalized quote and assistance.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3 mb-4">
-                  <label
-                    className="flex items-center p-3 border rounded-md cursor-pointer border-black"
-                  >
-                    <input
-                      type="radio"
-                      name="payment"
-                      value="online"
-                      checked={payment === 'online'}
-                      onChange={(e) => {
-                        setPayment('online');
-                        setPaymentMethod('online');
-                      }}
-                      className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 mr-3"
-                    />
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900">Online Payment</div>
-                      <p className="text-sm text-gray-500 mt-1">Pay securely with cards, UPI, or net banking</p>
-                    </div>
-                  </label>
-
-                  <div className="flex items-center gap-2 mt-4">
-                    <span className="text-sm text-gray-600">100% Secure Payment</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 mt-2">
-                    <img src="/visa-img.png" alt="Visa" className="h-4" />
-                    <img src="/master-card.png" alt="Mastercard" className="h-4" />
-                    <img src="/rupay.png" alt="Rupay" className="h-4" />
-                    <img src="/upi.png" alt="UPI" className="h-4" />
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">We accept all major credit/debit cards, UPI, and Netbanking.</p>
-                </div>
-              )}
-            </div>
-
-            {showEnquiryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg max-w-md w-full p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">Enquiry Form</h3>
-                    <button
-                      onClick={() => setShowEnquiryModal(false)}
-                      className="text-gray-500 hover:text-gray-700"
-                      disabled={isSubmittingEnquiry}
-                    >
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <p className="text-gray-600 mb-4">
-                    Thank you for your interest in our premium products. Our team will contact you shortly to discuss your requirements and provide a personalized quote.
-                  </p>
-                  <div className="mt-4 flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setShowEnquiryModal(false)}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-                      disabled={isSubmittingEnquiry}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleEnquirySubmit}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                      disabled={isSubmittingEnquiry}
-                    >
-                      {isSubmittingEnquiry ? 'Submitting...' : 'Submit Enquiry'}
-                    </button>
-                  </div>
-                </div>
+              <p className="text-gray-600 mb-4">
+                Thank you for your interest in our premium products. Our team will contact you shortly to discuss your requirements and provide a personalized quote.
+              </p>
+              <div className="mt-4 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEnquiryModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                  disabled={isSubmittingEnquiry}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEnquirySubmit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  disabled={isSubmittingEnquiry}
+                >
+                  {isSubmittingEnquiry ? 'Submitting...' : 'Submit Enquiry'}
+                </button>
               </div>
-            )}
-            {/* Add this modal component at the bottom of your JSX, just before the final closing tag */}
-            {showEnquiryModal && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg max-w-md w-full p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">Enquiry Form</h3>
-                    <button
-                      onClick={() => setShowEnquiryModal(false)}
-                      className="text-gray-500 hover:text-gray-700"
-                    >
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-                  <p className="text-gray-600 mb-4">
-                    Thank you for your interest in our premium products. Our team will contact you shortly to discuss your requirements and provide a personalized quote.
-                  </p>
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        // Add your form submission logic here
-                        setShowEnquiryModal(false);
-                        // You can add additional logic like form submission or redirection
-                      }}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                    >
-                      Submit Enquiry
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <div className="text-red-600">No checkout data found.</div>
-        )}
-
-        <div className="flex items-start gap-2 mt-6 mb-4">
-          <div className="flex items-start">
-            <input
-              type="checkbox"
-              id="terms"
-              name="agree"
-              checked={agree}
-              onChange={e => {
-                setAgree(e.target.checked);
-                if (formErrors.agree) {
-                  setFormErrors(prev => ({ ...prev, agree: '' }));
-                }
-              }}
-              className={`accent-pink-600 w-4 h-4 mt-1 ${formErrors.agree ? 'ring-2 ring-red-500' : ''}`}
-            />
-            <label htmlFor="terms" className="text-xs text-gray-600 ml-2">
-              I have read and agree to the website terms and conditions
-            </label>
-          </div>
-          {formErrors.agree && <p className="text-red-500 text-xs mt-1 ml-6">{formErrors.agree}</p>}
-        </div>
-        {formErrors.payment && (
-          <div className="mb-4 p-2 bg-red-50 border-l-4 border-red-500">
-            <p className="text-red-700 text-sm">{formErrors.payment}</p>
+            </div>
           </div>
         )}
-        <div className="mt-4 mb-4">
-        </div>
-        <button
-          className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors"
-          disabled={loading || isProcessingPayment}
-          type="button"
-          onClick={async () => {
-            if (!validateForm()) {
-              // Scroll to first error
-              const firstError = Object.keys(formErrors)[0];
-              if (firstError) {
-                const element = document.querySelector(`[name="${firstError}"]`);
-                if (element) {
-                  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
+        {/* Add this modal component at the bottom of your JSX, just before the final closing tag */}
+        {showEnquiryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium">Enquiry Form</h3>
+                <button
+                  onClick={() => setShowEnquiryModal(false)}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="text-gray-600 mb-4">
+                Thank you for your interest in our premium products. Our team will contact you shortly to discuss your requirements and provide a personalized quote.
+              </p>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Add your form submission logic here
+                    setShowEnquiryModal(false);
+                    // You can add additional logic like form submission or redirection
+                  }}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Submit Enquiry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+      ) : (
+      <div className="text-red-600">No checkout data found.</div>
+        )}
+
+      <div className="flex items-start gap-2 mt-6 mb-4">
+        <div className="flex items-start">
+          <input
+            type="checkbox"
+            id="terms"
+            name="agree"
+            checked={agree}
+            onChange={e => {
+              setAgree(e.target.checked);
+              if (formErrors.agree) {
+                setFormErrors(prev => ({ ...prev, agree: '' }));
               }
-              return;
-            }
-
-            if (!payment) {
-              setFormErrors(prev => ({ ...prev, payment: 'Please select a payment method' }));
-              return;
-            }
-
-            if (!agree) {
-              setFormErrors(prev => ({ ...prev, agree: 'You must agree to the terms and conditions' }));
-              return;
-            }
-
-            setConfirmedPaymentMethod(payment); // payment = 'cod' or 'online'
-            setShowOverview(true);
-          }}
-        >
-          {loading ? (
-            <>
-              <span className="animate-spin inline-block mr-2">🔄</span> Processing...
-            </>
-          ) : payment === 'booking_enquiry' ? (
-            `Place Order (₹${checkoutData?.cartTotal?.toFixed(2) || '0.00'})`
-          ) : (
-            `Pay ₹${checkoutData?.cartTotal?.toFixed(2) || '0.00'}`
-          )}
-        </button>
-
+            }}
+            className={`accent-pink-600 w-4 h-4 mt-1 ${formErrors.agree ? 'ring-2 ring-red-500' : ''}`}
+          />
+          <label htmlFor="terms" className="text-xs text-gray-600 ml-2">
+            I have read and agree to the website terms and conditions
+          </label>
+        </div>
+        {formErrors.agree && <p className="text-red-500 text-xs mt-1 ml-6">{formErrors.agree}</p>}
       </div>
+      {formErrors.payment && (
+        <div className="mb-4 p-2 bg-red-50 border-l-4 border-red-500">
+          <p className="text-red-700 text-sm">{formErrors.payment}</p>
+        </div>
+      )}
+      <div className="mt-4 mb-4">
+      </div>
+      <button
+        className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white rounded font-semibold text-sm transition-colors"
+        disabled={loading || isProcessingPayment}
+        type="button"
+        onClick={async () => {
+          if (!validateForm()) {
+            // Scroll to first error
+            const firstError = Object.keys(formErrors)[0];
+            if (firstError) {
+              const element = document.querySelector(`[name="${firstError}"]`);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }
+            return;
+          }
+
+          if (!payment) {
+            setFormErrors(prev => ({ ...prev, payment: 'Please select a payment method' }));
+            return;
+          }
+
+          if (!agree) {
+            setFormErrors(prev => ({ ...prev, agree: 'You must agree to the terms and conditions' }));
+            return;
+          }
+
+          setConfirmedPaymentMethod(payment); // payment = 'cod' or 'online'
+          setShowOverview(true);
+        }}
+      >
+        {loading ? (
+          <>
+            <span className="animate-spin inline-block mr-2">🔄</span> Processing...
+          </>
+        ) : payment === 'booking_enquiry' ? (
+          `Place Order (₹${checkoutData?.cartTotal?.toFixed(2) || '0.00'})`
+        ) : (
+          `Pay ₹${checkoutData?.cartTotal?.toFixed(2) || '0.00'}`
+        )}
+      </button>
+
     </div>
+    </div >
 
   );
 }

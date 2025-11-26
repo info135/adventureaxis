@@ -7,10 +7,12 @@ import { Heart, Share2, Ruler, Mail, Star } from "lucide-react"
 import { useCart } from "../context/CartContext";
 import Autoplay from "embla-carousel-autoplay";
 import toast from "react-hot-toast"
+import { useSession } from 'next-auth/react';
 export default function QuickViewProductCard({ product, onClose }) {
   // ...existing hooks
   // console.log(product)
   if (!product) return null;
+  const { data: session } = useSession();
   const { addToCart, addToWishlist, removeFromWishlist, wishlist } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [showFullDesc, setShowFullDesc] = React.useState(false);
@@ -103,10 +105,8 @@ export default function QuickViewProductCard({ product, onClose }) {
   let discountedPrice = basePrice;
   let hasDiscount = false;
   let couponText = '';
-  // Calculate total price based on quantity
-  const totalPrice = hasDiscount ? (discountedPrice * quantity) : (basePrice * quantity);
-  const totalOriginalPrice = basePrice * quantity;
 
+  // Calculate discount first
   if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
     discountedPrice = basePrice - (basePrice * coupon.percent) / 100;
     hasDiscount = true;
@@ -116,6 +116,10 @@ export default function QuickViewProductCard({ product, onClose }) {
     hasDiscount = true;
     couponText = `${coupon.couponCode || ''} (₹${coupon.amount} OFF)`;
   }
+
+  // Then calculate totals
+  const totalPrice = hasDiscount ? (discountedPrice * quantity) : (basePrice * quantity);
+  const totalOriginalPrice = basePrice * quantity;
   // console.log(selectedVariant?.price);
 
   // Set default selection on mount or when variants change
@@ -138,10 +142,15 @@ export default function QuickViewProductCard({ product, onClose }) {
   const formatNumeric = (num) => {
     return new Intl.NumberFormat("en-IN").format(num);
   };
+  // Calculate vendor prices if available
+  const vendorPrice = product?.quantity?.variants[0]?.vendorPrice;
+  const totalVendorPrice = vendorPrice ? vendorPrice * quantity : totalPrice;
+  const totalOriginalVendorPrice = vendorPrice ? vendorPrice * quantity : totalOriginalPrice;
+  const isVendor = session?.user?.isVendor;
   return (
     <div className="flex flex-col md:flex-row bg-white shadow-lg w-full md:max-w-4xl min-h-[400px]">
       {/* Left: Image Gallery */}
-      <div className="flex flex-col items-center w-full md:w-1/2 relative h-full flex-1 pr-2 md:pr-0">
+      <div className="flex flex-col items-center w-full md:w-1/2 relative h-full flex-1 p-1 md:pr-0">
         {/* Main Image Gallery - full height, animated swipe */}
         <div className="relative w-full h-full min-h-[400px] overflow-hidden flex items-center justify-center">
           <Carousel
@@ -156,12 +165,14 @@ export default function QuickViewProductCard({ product, onClose }) {
           >
             <CarouselContent className="h-[420px] w-full mx-auto md:h-[500px]">
               {images.map((img, idx) => (
-                <CarouselItem key={idx} className="flex items-center justify-center h-full">
+                <CarouselItem key={idx} className="flex items-center justify-center h-full -pl-2">
                   <div className="relative w-full h-[420px] md:h-[500px] flex items-center justify-center">
                     <Image
                       src={img}
                       alt={`Product image ${idx}`}
-                      layout="fill"
+                      height={500}
+                      width={500}
+                      priority={true}
                       objectFit="contain"
                       className="w-full h-full object-contain"
                     />
@@ -173,30 +184,32 @@ export default function QuickViewProductCard({ product, onClose }) {
             <CarouselNext className="!right-1 !top-1/2 !-translate-y-1/2 z-50" />
           </Carousel>
 
-          {/* Thumbnails overlayed in top-left, flex-col, z-10 */}
-          <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 max-h-[380px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent p-2">
-            {images.map((img, idx) => (
-              <button
-                key={idx}
-                className={`relative w-14 h-14 border rounded-lg overflow-hidden focus:outline-none bg-white/80 ${activeImageIdx === idx ? 'ring-2 ring-black' : ''}`}
-                onClick={() => {
-                  if (carouselApi && idx !== activeImageIdx) {
-                    carouselApi.scrollTo(idx);
-                  }
-                }}
-                aria-label={`Show image ${idx + 1}`}
-                style={{ boxShadow: activeImageIdx === idx ? '0 0 0 2px #000' : undefined }}
-              >
-                <Image src={img} alt={`thumb-${idx}`} layout="fill" objectFit="cover" />
-              </button>
-            ))}
+          {/* Thumbnails in a vertical scrollable container - scrollbar hidden */}
+          <div className="absolute top-1 left-1 z-10 flex flex-col overflow-y-auto max-h-[calc(100%-1rem)] py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <div className="flex flex-col gap-2 px-2">
+              {images.map((img, idx) => (
+                <button
+                  key={idx}
+                  className={`relative w-14 h-14 border rounded-lg overflow-hidden focus:outline-none bg-white/80 ${activeImageIdx === idx ? 'ring-2 ring-black' : ''}`}
+                  onClick={() => {
+                    if (carouselApi && idx !== activeImageIdx) {
+                      carouselApi.scrollTo(idx);
+                    }
+                  }}
+                  aria-label={`Show image ${idx + 1}`}
+                  style={{ boxShadow: activeImageIdx === idx ? '0 0 0 2px #000' : undefined }}
+                >
+                  <Image src={img} alt={`thumb-${idx}`} height={500} width={500} priority={true} objectFit="cover" />
+                </button>
+              ))}
+            </div>
           </div>
 
         </div>
       </div>
 
       {/* Right: Product Details */}
-      <div className="flex-1 flex flex-col py-4 px-6">
+      <div className="flex-1 flex flex-col py-4 px-4">
         {/* SALE badge */}
         {/* <span className="bg-black text-white text-xs font-bold px-3 py-1 rounded-full w-max mb-2">SALE 20% OFF</span> */}
         {/* Title & Rating */}
@@ -282,7 +295,13 @@ export default function QuickViewProductCard({ product, onClose }) {
                   <div className="flex justify-between items-center w-full gap-2">
                     <span>{size}</span>
                     <div className="h-4 w-px bg-gray-300" />
-                    <span className="text-gray-600 text-md"> {weight ? (Number(weight)).toLocaleString(): '0'} kg</span>
+                    <span className="text-gray-600 text-md">
+                      {weight ? (
+                        Number(weight) < 1
+                          ? `${(Number(weight) * 1000).toFixed(0)}g`
+                          : `${Number(weight).toFixed(3)} kg`
+                      ) : '0g'}
+                    </span>
                   </div>
                 </button>
               );
@@ -328,7 +347,7 @@ export default function QuickViewProductCard({ product, onClose }) {
             </span>
           )}
         </div>
-        <div className="flex flex-row items-end justify-start gap-10 mb-5">
+        <div className="flex flex-row items-end justify-start gap-5 mb-5">
           {/* Price section */}
           <div className="flex flex-col items-start">
             <span className="font-bold text-md md:text-lg text-black mb-1">Price</span>
@@ -339,11 +358,31 @@ export default function QuickViewProductCard({ product, onClose }) {
                     <span className="font-bold text-xl">₹{formatNumeric(totalPrice)}</span>
                     <span className="text-gray-500 line-through">₹{formatNumeric(totalOriginalPrice)}</span>
                   </div>
+
                 </div>
               ) : (
-                <div className="flex flex-col items-start">
-                  <span className="font-bold text-xl">₹{formatNumeric(totalPrice)}</span>                </div>
+                // Regular user view - just show regular price
+                <span className="font-bold text-xl">₹{formatNumeric(totalPrice)}</span>
               )}
+            </div>
+          </div>
+          <div className="flex flex-col items-start">
+            <div className="flex items-baseline flex-col">
+              {session?.user?.isVendor && vendorPrice && (
+              <span className="font-bold text-md md:text-lg text-black mb-1">B to B Price</span>
+              )}
+
+              <div className="flex flex-col items-start">
+                {session?.user?.isVendor && vendorPrice && (
+                  // Vendor view - show both prices
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-xl">₹{formatNumeric(vendorPrice)}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
           {/* Quantity section */}
@@ -372,7 +411,9 @@ export default function QuickViewProductCard({ product, onClose }) {
           <button
             className="bg-black text-white px-4 py-2 font-semibold hover:bg-gray-800 w-1/2"
             onClick={() => {
-              const price = product?.quantity?.variants[0].price;
+              const basePrice = selectedVariant?.price || product?.quantity?.variants[0].price;
+              const vendorPrice = selectedVariant?.vendorPrice || product?.quantity?.variants[0]?.vendorPrice;
+              const price = isVendor && vendorPrice ? vendorPrice : basePrice;
               const coupon = product.coupon || product.coupons?.coupon;
               let discountedPrice = price;
               let couponApplied = false;
@@ -387,13 +428,19 @@ export default function QuickViewProductCard({ product, onClose }) {
                 couponApplied = true;
                 couponCode = coupon.couponCode;
               }
-              addToCart({
-                id: product._id,
+
+              // Generate unique cart item ID based on product ID, size, and color
+              const cartItemId = `${product._id}-${selectedSize || ''}-${selectedColor || ''}`.toLowerCase().replace(/\s+/g, '-');
+              
+              const cartItem = {
+                id: cartItemId,
+                productId: product._id,
                 name: product.title,
                 image: product?.gallery?.mainImage || "/placeholder.jpeg",
                 price: Math.round(discountedPrice),
-                originalPrice: price,
-                qty: 1,
+                originalPrice: selectedVariant?.price || basePrice,
+                vendorPrice: selectedVariant?.vendorPrice,
+                qty: Number(quantity) || 1,
                 couponApplied,
                 couponCode: couponApplied ? couponCode : undefined,
                 productCode: product.code || product.productCode || '',
@@ -401,44 +448,74 @@ export default function QuickViewProductCard({ product, onClose }) {
                 discountAmount: coupon && typeof coupon.amount === 'number' ? coupon.amount : undefined,
                 cgst: (product.taxes && product.taxes.cgst) || product.cgst || (product.tax && product.tax.cgst) || 0,
                 sgst: (product.taxes && product.taxes.sgst) || product.sgst || (product.tax && product.tax.sgst) || 0,
-                quantity: product.quantity || {},
-              }, quantity);
-              toast.success("Added to cart!");
-            }}
+                size: selectedSize,
+                weight: selectedWeight,
+                color: selectedColor,
+                variantId: selectedVariant?._id,
+                totalQuantity: selectedVariant?.qty || 0,
+              };
 
+              addToCart(cartItem, quantity);
+              toast.success(`Added ${quantity} item${quantity > 1 ? 's' : ''} to cart!`);
+            }}
           >ADD TO CART</button>
+
           <button
             className="border border-black py-1 font-semibold w-1/2 flex items-center justify-center gap-2 bg-white hover:bg-[#b3a7a3]"
             onClick={() => {
-              if (wishlist.some(i => i.id === product._id)) {
-                removeFromWishlist(product._id);
+              // Generate variant-specific ID for checking
+              const variantId = `${product._id}-${selectedSize || ''}-${selectedColor || ''}`.toLowerCase().replace(/\s+/g, '-');
+              
+              if (wishlist.some(i => i.id === variantId)) {
+                removeFromWishlist(variantId);
                 toast.success("Removed from wishlist!");
                 return;
-              } else {
-                const coupon = product.coupon || product.coupons?.coupon;
-                const originalPrice = product?.quantity?.variants[0].price;
-                let discountedPrice = originalPrice;
-                let couponApplied = false;
-                let couponCode = '';
-                if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
-                  discountedPrice = originalPrice - (originalPrice * coupon.percent) / 100;
-                  couponApplied = true;
-                  couponCode = coupon.couponCode;
-                } else if (coupon && typeof coupon.amount === 'number' && coupon.amount > 0) {
-                  discountedPrice = originalPrice - coupon.amount;
-                  couponApplied = true;
-                  couponCode = coupon.couponCode;
-                }
-                addToWishlist({
-                  id: product._id,
-                  name: product.title,
-                  image: product?.gallery?.mainImage || "/placeholder.png",
-                  price: couponApplied ? Math.round(discountedPrice) : couponApplied,
-                  couponCode,
-                  qty: quantity
-                });
-                toast.success("Added to wishlist!");
               }
+
+              const basePrice = selectedVariant?.price || product?.quantity?.variants[0].price;
+              const vendorPrice = selectedVariant?.vendorPrice || product?.quantity?.variants[0]?.vendorPrice;
+              const price = isVendor && vendorPrice ? vendorPrice : basePrice;
+              const coupon = product.coupon || product.coupons?.coupon;
+              let discountedPrice = price;
+              let couponApplied = false;
+              let couponCode = '';
+
+              if (coupon && typeof coupon.percent === 'number' && coupon.percent > 0) {
+                discountedPrice = price - (price * coupon.percent) / 100;
+                couponApplied = true;
+                couponCode = coupon.couponCode;
+              } else if (coupon && typeof coupon.amount === 'number' && coupon.amount > 0) {
+                discountedPrice = price - coupon.amount;
+                couponApplied = true;
+                couponCode = coupon.couponCode;
+              }
+
+              // Generate unique wishlist item ID based on product ID, size, and color
+              const wishlistItemId = `${product._id}-${selectedSize || ''}-${selectedColor || ''}`.toLowerCase().replace(/\s+/g, '-');
+              
+              const wishlistItem = {
+                id: wishlistItemId,
+                productId: product._id,
+                name: product.title,
+                image: product?.gallery?.mainImage || "/placeholder.png",
+                price: Math.round(discountedPrice),
+                originalPrice: selectedVariant?.price || basePrice,
+                vendorPrice: selectedVariant?.vendorPrice,
+                qty: Number(quantity) || 1,
+                couponApplied,
+                couponCode: couponApplied ? couponCode : undefined,
+                productCode: product.code || product.productCode || '',
+                cgst: (product.taxes && product.taxes.cgst) || product.cgst || (product.tax && product.tax.cgst) || 0,
+                sgst: (product.taxes && product.taxes.sgst) || product.sgst || (product.tax && product.tax.sgst) || 0,
+                size: selectedSize,
+                weight: selectedWeight,
+                color: selectedColor,
+                variantId: selectedVariant?._id,
+                totalQuantity: selectedVariant?.qty || 0,
+              };
+
+              addToWishlist(wishlistItem);
+              toast.success("Added to wishlist!");
             }}
           >
             <div

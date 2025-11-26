@@ -29,7 +29,7 @@ export async function POST(req) {
     if (!v.size || !v.color || typeof v.qty !== 'number' || typeof v.price !== 'number' || typeof v.weight !== 'number') {
       return Response.json({ error: 'Each variant must have size, color, qty, price, weight' }, { status: 400 });
     }
-    
+
     // Process images for each variant
     if (v.profileImage && typeof v.profileImage === 'object') {
       // Ensure profileImage has required fields
@@ -37,7 +37,7 @@ export async function POST(req) {
         return Response.json({ error: 'Profile image must have both url and key' }, { status: 400 });
       }
     }
-    
+
     if (v.subImages && Array.isArray(v.subImages)) {
       // Validate each subImage
       for (const img of v.subImages) {
@@ -56,16 +56,16 @@ export async function POST(req) {
         // Ensure the images object has the correct structure
         images: {
           profile: variant.images.profile || variant.profileImage || null,
-          subImages: Array.isArray(variant.images.subImages) ? variant.images.subImages : 
-                    (Array.isArray(variant.subImages) ? variant.subImages : [])
+          subImages: Array.isArray(variant.images.subImages) ? variant.images.subImages :
+            (Array.isArray(variant.subImages) ? variant.subImages : [])
         },
         // Keep the old structure for backward compatibility
         profileImage: variant.images.profile || variant.profileImage || null,
-        subImages: Array.isArray(variant.images.subImages) ? variant.images.subImages : 
-                  (Array.isArray(variant.subImages) ? variant.subImages : [])
+        subImages: Array.isArray(variant.images.subImages) ? variant.images.subImages :
+          (Array.isArray(variant.subImages) ? variant.subImages : [])
       };
     }
-    
+
     // Fallback to old structure if images is not present
     return {
       ...variant,
@@ -104,7 +104,7 @@ export async function PUT(req) {
       { quantity: updated._id },
       { new: true }
     );
-    return Response.json({quantity});
+    return Response.json({ quantity });
   }
 }
 
@@ -116,20 +116,20 @@ export async function DELETE(req) {
   const { searchParams } = new URL(req.url);
   const id = searchParams.get('id');
   const productId = searchParams.get('productId');
-  
+
   if (!id) return Response.json({ error: 'Missing id' }, { status: 400 });
-  
+
   try {
     // First get the quantity record to access the images
     const quantity = await Quantity.findById(id);
-    
+
     if (!quantity) {
       return Response.json({ error: 'Quantity record not found' }, { status: 404 });
     }
-    
+
     // Delete all images from Cloudinary
     const deletePromises = [];
-    
+
     // Process each variant's images
     if (Array.isArray(quantity.variants)) {
       quantity.variants.forEach(variant => {
@@ -140,7 +140,7 @@ export async function DELETE(req) {
               .catch(error => console.error('Error deleting profile image:', error))
           );
         }
-        
+
         // Delete sub images if exist
         if (Array.isArray(variant.subImages)) {
           variant.subImages.forEach(image => {
@@ -154,20 +154,20 @@ export async function DELETE(req) {
         }
       });
     }
-    
+
     // Wait for all deletions to complete
     await Promise.all(deletePromises);
-    
+
     // Delete the quantity record
     await Quantity.findByIdAndDelete(id);
-    
+
     // Update the product to remove the quantity reference
     if (productId) {
       await Product.findByIdAndUpdate(productId, { $unset: { quantity: '' } });
     }
-    
+
     return Response.json({ success: true });
-    
+
   } catch (error) {
     console.error('Error deleting quantity record:', error);
     return Response.json(

@@ -96,7 +96,7 @@ export async function POST(req) {
                     <tr>
                         <td class="content" style="padding: 40px 30px;">
                             <p style="margin-top: 0; color: #333333; font-size: 16px; line-height: 1.5;">Hello, ${email}</p>
-                            <p style="color: #333333; font-size: 16px; line-height: 1.5;">Thank you for signing up with <span style="font-weight: 900; color: #4F46E5;">Rishikesh HandMade!</span>. Please use the following verification code to complete your sign-in:</p>
+                            <p style="color: #333333; font-size: 16px; line-height: 1.5;">Thank you for signing up with <span style="font-weight: 900; color: #4F46E5;">Adventure Axis!</span>. Please use the following verification code to complete your sign-in:</p>
                             <div style="background-color: #f8f9fa; border-radius: 4px; padding: 20px; margin: 30px 0; text-align: center;">
                                 <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #4F46E5;">${otp}</span>
                             </div>
@@ -108,7 +108,7 @@ export async function POST(req) {
                         <td style="padding: 20px 30px; text-align: center; background-color: #f8f9fa; border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;">
                             <div class="footer">
             <p>If you have any questions, feel free to contact: <a href="mailto:info@adventureaxis.in">info@adventureaxis.in</a>.</p>
-            <p>&copy; ${new Date().getFullYear()} Rishikesh HandMade. All rights reser  ved.</p>
+            <p>&copy; ${new Date().getFullYear()} Adventure Axis. All rights reserved.</p>
         </div>
                         </td>   
                     </tr>

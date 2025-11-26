@@ -19,7 +19,7 @@ const OverlayButton = () => {
             position: "left", // Position may be 'right' or 'left'
             order: "call,whatsapp", // Order of buttons
             pre_filled_message: "Chat With Us", // WhatsApp pre-filled message
-            
+
         };
 
         const proto = "https:",
@@ -42,6 +42,8 @@ const OverlayButton = () => {
             document.body.removeChild(s)
         };
     }, []);
+
+    return null;
 }
 
 export default OverlayButton

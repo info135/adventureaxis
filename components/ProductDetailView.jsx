@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Heart, Share2, Ruler, Mail, Star, MapPin, InfoIcon, X, Loader2 } from "lucide-react"
 import { useCart } from "../context/CartContext";
 import { toast } from "react-hot-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import {
   Carousel,
   CarouselContent,
@@ -21,6 +21,7 @@ import {
 } from "./ui/dialog";
 import VisuallyHidden from '@/components/VisuallyHidden';
 import Autoplay from "embla-carousel-autoplay";
+import { useSession } from 'next-auth/react';
 export default function ProductDetailView({ product }) {
   // console.log(product);
   // --- Ask An Expert Modal State ---
@@ -35,6 +36,7 @@ export default function ProductDetailView({ product }) {
     question: '',
     contactMethod: 'Phone',
   });
+  const { data: session } = useSession();
   const handleExpertInputChange = (e) => {
     const { name, value, type } = e.target;
     setExpertForm((prev) => ({
@@ -76,7 +78,7 @@ export default function ProductDetailView({ product }) {
     }
   };
 
-
+  const pathname = usePathname();
   const router = useRouter();
   const [showShareBox, setShowShareBox] = React.useState(false);
   const [productUrl, setProductUrl] = React.useState("");
@@ -118,24 +120,7 @@ export default function ProductDetailView({ product }) {
   const words = desc.split(' ');
   const [shippingTierLabel, setShippingTierLabel] = useState("");
   const [FinalShipping, setFinalShipping] = useState(0);
-  const [pincodeResult, setPincodeResult] = React.useState(null);
-  const [pincodeError, setPincodeError] = React.useState("");
-  const [stateInput, setStateInput] = React.useState("");
-  const [districtInput, setDistrictInput] = React.useState("");
-  const [statesList, setStatesList] = useState([]);
-  const [pincodeInput, setPincodeInput] = React.useState("");
-  const [loadingShipping, setLoadingShipping] = useState(false);
   const [shippingPerUnit, setShippingPerUnit] = useState(null);
-
-  // Restore delivery location from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('deliveryLocation');
-    if (saved) {
-      const loc = JSON.parse(saved);
-      setPincodeInput(loc.pincode);
-      setPincodeResult(loc);
-    }
-  }, []);
 
   // Extract variants
   const variants = Array.isArray(product?.quantity?.variants) ? product.quantity.variants : [];
@@ -264,24 +249,7 @@ export default function ProductDetailView({ product }) {
     setActiveImageIdx(carouselApi.selectedScrollSnap());
     return () => carouselApi.off('select', onSelect);
   }, [carouselApi]);
-
-  useEffect(() => {
-    // Fetch states/districts from API on mount
-    const fetchStates = async () => {
-      try {
-        const res = await fetch('/api/zipcode');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setStatesList(data.data);
-        }
-      } catch (e) {
-        setStatesList([]);
-      }
-    };
-
-    fetchStates();
-  }, []);
-
+  const isVendor = session?.user?.isVendor;
 
   return (
     <div className="flex flex-col md:flex-row gap-4">
@@ -406,46 +374,52 @@ export default function ProductDetailView({ product }) {
         })()}
         {/* Selectors */}
         {/* Price and Coupon Section */}
-        <div className="mb-2 flex items-center gap-2">
-          {selectedVariant && selectedVariant.price !== undefined && selectedVariant.price !== null ? (
-            hasDiscount ? (
-              <div className="flex items-center gap-2 mb-1">
-                <div className="flex flex-col">
-                  <div className="flex items-center">
-                    {selectedVariant.qty <= 0 ? (
-                      <span className="text-red-600 text-lg font-medium">Out of Stock</span>
-                    ) : (
+        <div className="mb-2 flex flex-col gap-1">
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col gap-2">
+                  {session?.user?.isVendor && selectedVariant?.vendorPrice && (
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm text-black font-semibold">B2B Price</span>
                       <span className="font-bold text-xl text-black">
-                        ₹ {formatNumeric(Math.round(discountedPrice * quantity))}
+                        ₹{formatNumeric(selectedVariant.vendorPrice)}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center text-sm">
-                    <del className="text-gray-600 font-semibold">
-                      ₹{formatNumeric(selectedVariant.price * quantity)}
-                    </del>
-                    <span className="border border-green-500 text-green-700 px-2 py-0.5 rounded text-xs font-semibold bg-green-50 ml-2">
-                      Coupon Applied: {couponText}
-                    </span>
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                {selectedVariant.qty <= 0 ? (
-                  <span className="text-red-600 text-lg font-medium">Out of Stock</span>
-                ) : (
-                  <span className="font-bold text-xl text-black">
-                    ₹ {formatNumeric(selectedVariant.price * quantity)}
-                  </span>
+            </div>
+          </div>
+          {session?.user?.isVendor && selectedVariant?.vendorPrice && (
+            <div className="bg-black h-px" />
+          )}
+          {hasDiscount ? (
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex gap-4 items-start">
+                {session?.user?.isVendor && (
+                  <span className="text-sm text-black font-semibold">B2C Price</span>
                 )}
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xl text-black">₹{formatNumeric(Math.round(discountedPrice))}</span>
+                  <del className="text-gray-600 font-semibold text-sm mr-2">₹{formatNumeric(selectedVariant?.price)}</del>
+                </div>
               </div>
-            )
+              <span className="border border-green-500 text-green-700 px-2 py-0.5 rounded text-xs font-semibold bg-green-50">Coupon Applied: {couponText}</span>
+            </div>
           ) : (
-            <div className="flex items-center">
-              <span className="text-red-600 font-semibold text-sm">Price Not Available</span>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="flex gap-4 items-start">
+                   {session?.user?.isVendor && (
+                  <span className="text-sm text-black font-semibold">B2C Price</span>
+                )}
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xl text-black">₹{formatNumeric(selectedVariant?.price || 0)}</span>
+                </div>
+              </div>
             </div>
           )}
+
         </div>
 
         {/* Stock Status */}
@@ -533,13 +507,23 @@ export default function ProductDetailView({ product }) {
                   onClick={() => {
                     setSelectedSize(size);
                     setQuantity(1);
-                    // Get all colors for this size
-                    const colorsForSize = variants.filter(v => v.size === size).map(v => v.color);
-                    const newColor = colorsForSize.includes(selectedColor) ? selectedColor : colorsForSize[0];
-                    setSelectedColor(newColor);
-                    // Get weight for size+color
-                    const weightForSize = variants.find(v => v.size === size && v.color === newColor)?.weight;
-                    setSelectedWeight(weightForSize);
+
+                    // Find all variants with the selected size
+                    const variantsForSize = variants.filter(v => v.size === size);
+
+                    // If no variants found for this size, reset color and weight
+                    if (variantsForSize.length === 0) {
+                      setSelectedColor(null);
+                      setSelectedWeight(null);
+                      return;
+                    }
+
+                    // Try to find a variant with the current color, otherwise use the first available color
+                    const colorVariant = variantsForSize.find(v => v.color === selectedColor) || variantsForSize[0];
+
+                    // Update color and weight based on the found variant
+                    setSelectedColor(colorVariant.color);
+                    setSelectedWeight(colorVariant.weight);
                   }}
                   aria-pressed={selectedSize === size}
                   tabIndex={0}
@@ -547,9 +531,11 @@ export default function ProductDetailView({ product }) {
                   <div className="flex justify-between items-center w-full gap-2">
                     <span>{size}</span>
                     <div className="h-4 w-px bg-gray-300" />
-                    <span className="text-gray-600 text-md">
-                      {weight?.toLocaleString()} kg
-                    </span>
+                    <span className="text-gray-600 text-md">  {weight ? (
+                      Number(weight) < 1
+                        ? `${(Number(weight) * 1000).toFixed(0)}g`
+                        : `${Number(weight).toFixed(3)} kg`
+                    ) : '0g'}</span>
                   </div>
                 </button>
               );
@@ -754,95 +740,6 @@ export default function ProductDetailView({ product }) {
               );
             })}
           </div>
-          {/* Pincode check UI */}
-          <div className="">
-            <div className="flex items-center gap-2 my-2">
-              <span className="text-base font-medium flex items-center gap-1">
-                <MapPin size={18} className="inline-block" />
-                Delivery Options
-              </span>
-            </div>
-            {!pincodeResult ? (
-              <div className="border rounded px-4 py-3 flex items-center gap-2 bg-white max-w-xs">
-                <input
-                  type="text"
-                  className="flex-1 bg-transparent outline-none text-gray-700"
-                  placeholder="Enter pincode"
-                  value={pincodeInput}
-                  onChange={e => setPincodeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                  maxLength={6}
-                />
-                <button
-                  className="text-blue-900 font-semibold ml-2"
-                  disabled={loadingShipping || pincodeInput.length !== 6}
-                  onClick={async () => {
-                    setPincodeError('');
-                    setLoadingShipping(true);
-                    setPincodeResult(null);
-                    try {
-                      // You may want to auto-detect state/district from another API if needed.
-                      // Here, we assume checkZip API can find from just pincode.
-                      const res = await fetch('/api/zipcode/checkZip', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ pincode: pincodeInput }),
-                      });
-                      const data = await res.json();
-                      if (data.success) {
-                        setPincodeResult(data);
-                        setPincodeError("");
-                        // Persist delivery location to localStorage
-                        localStorage.setItem('deliveryLocation', JSON.stringify({
-                          pincode: data.pincode,
-                          city: data.city,
-                          state: data.state,
-                          district: data.district
-                        }));
-                      } else {
-                        setPincodeError(data.message || 'Delivery not available');
-                      }
-                    } catch {
-                      setPincodeError('Server error. Please try again.');
-                    } finally {
-                      setLoadingShipping(false);
-                    }
-                  }}
-                >
-                  {loadingShipping ? (
-                    <span className="flex items-center">
-                      <Loader2 className="animate-spin mr-2" />
-                      Checking...
-                    </span>
-                  ) : (
-                    'Check'
-                  )}
-
-                </button>
-              </div>
-            ) : (
-              <div className="border rounded px-4 py-3 bg-white w-fit">
-                <div className="flex items-center gap-2 mb-2">
-                  <MapPin size={18} className="inline-block" />
-                  <span className="font-semibold">Delivery options for {pincodeResult.pincode}</span>
-                  <button
-                    className="ml-auto px-2 py-1 border rounded border-black text-sm"
-                    onClick={() => {
-                      setPincodeInput('');
-                      setPincodeResult(null);
-                    }}
-                  >
-                    Change
-                  </button>
-                </div>
-                <div className="mb-1 text-sm">
-                  Shipping to: <span className="font-semibold">{pincodeResult.city || pincodeResult.district}, {pincodeResult.state}, India</span>
-                </div>
-              </div>
-            )}
-            {pincodeError && (
-              <div className="text-red-600 text-xs mt-1">{pincodeError}</div>
-            )}
-          </div>
           {/* Tags, etc. */}
           {product.categoryTag && (
             <div className="mb-4">
@@ -867,15 +764,13 @@ export default function ProductDetailView({ product }) {
           )}
         </div>
         <div className="py-2">
-  
+          <button
+            className="bg-black text-white py-3 px-8 font-semibold hover:bg-gray-800 w-full"
+            onClick={() => setShowPdfModal(true)}
+          >
+            Get Package PDF
+          </button>
 
-            <button
-              className="bg-black text-white py-3 px-8 font-semibold hover:bg-gray-800 w-full"
-              onClick={() => setShowPdfModal(true)}
-            >
-              Get Package PDF
-            </button>
-      
 
           <Dialog open={showPdfModal} onOpenChange={setShowPdfModal}>
             <DialogContent className="max-w-lg">
@@ -949,18 +844,23 @@ export default function ProductDetailView({ product }) {
                         toast.error("Selected variant is out of stock");
                         return;
                       }
-                      addToCart({
-                        id: product._id,
+                      // Use product ID as the base ID, CartContext will handle variant matching
+                      // Update the cartItemId to include size and color
+                      const cartItemId = `${product._id}-${selectedSize || ''}-${selectedColor || ''}`.toLowerCase().replace(/\s+/g, '-');
+                      const cartItem = {
+                        id: cartItemId, // Use just the product ID as the base ID
+                        productId: product._id, // Keep original product ID for reference
                         name: product.title,
-                        image: typeof selectedImage === "string" ? selectedImage : selectedImage?.url || product.gallery?.mainImage?.url || '/placeholder.jpeg',
-                        price: basePrice, // Use the base price (price per unit)
+                        image: typeof selectedImage === "string" ? selectedImage : selectedImage?.url || product.gallery?.mainImage?.url || '/placeholder.png',
+                        price: hasDiscount ? Math.round(discountedPrice) : selectedVariant.price,
+                        vendorPrice: selectedVariant?.vendorPrice,
                         originalPrice: selectedVariant.price,
                         couponApplied: hasDiscount,
                         couponCode: coupon ? coupon.couponCode : '',
                         size: selectedSize,
-                        weight: selectedWeight, // Convert grams to kg for cart
+                        weight: selectedWeight,
                         color: selectedColor,
-                        qty: quantity, // This will be used to calculate the total in the cart
+                        qty: quantity,
                         productCode: product.code || product.productCode || '',
                         discountPercent: coupon && typeof coupon.percent === 'number' ? coupon.percent : undefined,
                         discountAmount: coupon && typeof coupon.amount === 'number' ? coupon.amount : undefined,
@@ -968,8 +868,10 @@ export default function ProductDetailView({ product }) {
                         sgst: (product.taxes && product.taxes.sgst) || product.sgst || (product.tax && product.tax.sgst) || 0,
                         igst: (product.taxes && product.taxes.igst) || product.igst || (product.tax && product.tax.igst) || 0,
                         totalQuantity: selectedVariant.qty || 0,
-                      });
-                      toast.success("Added to cart!");
+                        variantId: selectedVariant._id, // Keep variant ID for reference
+                      }
+                      addToCart(cartItem, quantity);
+                      toast.success(`Added ${quantity} item${quantity > 1 ? 's' : ''} to cart!`);
                     }}
                   >
                     {currentVariantInStock ? 'ADD TO CART' : 'SELECT AVAILABLE VARIANT'}
@@ -992,16 +894,17 @@ export default function ProductDetailView({ product }) {
                   removeFromWishlist(product._id);
                   toast.success("Removed from wishlist!");
                 } else {
-                  addToWishlist({
+                  const wishlistItem = {
                     id: product._id,
                     name: product.title,
                     image: typeof selectedImage === "string" ? selectedImage : selectedImage?.url || product.gallery?.mainImage?.url || '/placeholder.png',
                     price: hasDiscount ? Math.round(discountedPrice) : selectedVariant.price,
+                    vendorPrice: selectedVariant?.vendorPrice,
                     originalPrice: selectedVariant.price,
                     couponApplied: hasDiscount,
                     couponCode: coupon ? coupon.couponCode : '',
                     size: selectedSize,
-                    weight: selectedWeight, // Convert grams to kg for cart
+                    weight: selectedWeight,
                     color: selectedColor,
                     qty: 1,
                     productCode: product.code || product.productCode || '',
@@ -1011,7 +914,8 @@ export default function ProductDetailView({ product }) {
                     sgst: (product.taxes && product.taxes.sgst) || product.sgst || (product.tax && product.tax.sgst) || 0,
                     igst: (product.taxes && product.taxes.igst) || product.igst || (product.tax && product.tax.igst) || 0,
                     totalQuantity: selectedVariant.qty || 0,
-                  });
+                  };
+                  addToWishlist(wishlistItem);
                   toast.success("Added to wishlist!");
                 }
               }}
@@ -1089,9 +993,9 @@ export default function ProductDetailView({ product }) {
               }`}
             onClick={async () => {
               if (!selectedVariant) return;
-              // Block if pincode is not entered
-              if (!pincodeInput) {
-                toast.error('Please enter your pincode before proceeding.');
+              // Check if user is logged in
+              if (!session) {
+                router.replace(`/sign-in?callbackUrl=${encodeURIComponent(pathname)}`);
                 return;
               }
               try {
@@ -1110,7 +1014,7 @@ export default function ProductDetailView({ product }) {
                   couponApplied = true;
                   couponCode = couponObj.couponCode;
                 }
-                const totalWeight = (selectedVariant?.weight || 0) * quantity; // Convert grams to kg for shipping calculation
+                const totalWeight = (selectedVariant?.weight || 0) * quantity;
                 // console.log(totalWeight);
                 // Fetch shipping charge from API before proceeding
                 let shippingCharge = 0;
@@ -1153,32 +1057,44 @@ export default function ProductDetailView({ product }) {
                   return;
                 }
 
+                // Calculate final price based on vendor or regular user
+                const vendorPrice = isVendor && product?.quantity?.variants[0]?.vendorPrice;
+                const finalPrice = vendorPrice || Math.round(discountedPrice);
+
+                // Calculate CGST and SGST based on the final price
+                const cgstRate = Number((product.taxes?.cgst || product.cgst || product.tax?.cgst || 0));
+                const sgstRate = Number((product.taxes?.sgst || product.sgst || product.tax?.sgst || 0));
+                const cgstTotal = (finalPrice * cgstRate / 100) * quantity;
+                const sgstTotal = (finalPrice * sgstRate / 100) * quantity;
+
                 const buyNowProduct = {
                   id: product._id,
                   name: product.title,
                   image: selectedImage || product.gallery?.mainImage?.url || '/placeholder.jpeg',
-                  price: Math.round(discountedPrice),
+                  price: finalPrice,
                   size: selectedSize,
-                  weight: selectedWeight, // Convert grams to kg for cart
+                  weight: selectedWeight,
                   color: selectedColor,
-                  originalPrice: price,
+                  originalPrice: vendorPrice ? price : price, // Keep original price for reference
                   qty: quantity,
                   totalWeight,
-                  couponApplied,
+                  couponApplied: vendorPrice ? false : couponApplied, // No coupon for vendors
                   finalShipping: FinalShipping,
-                  pincode: pincodeResult?.pincode || null,
-                  city: pincodeResult?.city || null,
-                  state: pincodeResult?.state || null,
-                  district: pincodeResult?.district || null,
-                  couponCode: couponApplied ? couponCode : undefined,
+                  couponCode: vendorPrice ? undefined : (couponApplied ? couponCode : undefined),
                   productCode: product.code || product.productCode || '',
-                  discountPercent: couponObj && typeof couponObj.percent === 'number' ? couponObj.percent : undefined,
-                  discountAmount: couponObj && typeof couponObj.amount === 'number' ? couponObj.amount : undefined,
-                  cgst: Number((product.taxes && product.taxes.cgst) || product.cgst || (product.tax && product.tax.cgst) || 0),
-                  sgst: Number((product.taxes && product.taxes.sgst) || product.sgst || (product.tax && product.tax.sgst) || 0),
-                  // quantity: product.quantity || {},
+                  discountPercent: vendorPrice ? 0 : (couponObj?.percent || 0),
+                  discountAmount: vendorPrice ? 0 : (couponObj?.amount || 0),
+                  cgst: cgstRate,
+                  sgst: sgstRate,
+                  cgstTotal,
+                  sgstTotal,
+                  totalTax: cgstTotal + sgstTotal,
+                  taxTotal: cgstTotal + sgstTotal,
+                  isVendor: !!vendorPrice,
+                  vendorPrice: vendorPrice || undefined, // Only include if it exists
+                  shippingTierLabel,
+                  shippingPerUnit
                 };
-
                 // Store the product in localStorage
                 localStorage.setItem('buyNowProduct', JSON.stringify(buyNowProduct));
 

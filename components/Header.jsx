@@ -1,7 +1,7 @@
 "use client"
 import { usePathname } from "next/navigation";
 import { useState, useEffect, useRef } from "react";
-import { ChevronDown, Globe, LogOutIcon, Mail, Phone, Truck, User2Icon } from "lucide-react"
+import { ChevronDown, Globe,Handshake, LogOutIcon, Mail, Phone, Truck, User2Icon } from "lucide-react"
 import Link from "next/link"
 import MenuBar from "./MenuBar"
 import { Button } from "./ui/button"
@@ -18,14 +18,14 @@ import * as NavigationMenu from "@radix-ui/react-navigation-menu";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import BrandCarousel from "./BrandCarousel";
-const Header = () => {
+const Header = ({menuItems}) => {
   const authDropdownRef = useRef(null);
   const profileMenuRef = useRef(null);
   const pathName = usePathname();
   const [isMounted, setIsMounted] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAuthDropdownOpen, setIsAuthDropdownOpen] = useState(false);
-  const [menuItems, setMenuItems] = useState([]);
+  // const [menuItems, setMenuItems] = useState([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [initialCartTab, setInitialCartTab] = useState('cart');
   const { data: session, status } = useSession();
@@ -67,11 +67,11 @@ const Header = () => {
     setIsMounted(true);
   }, []);
 
-  useEffect(() => {
-    fetch("/api/getAllMenuItems")
-      .then(res => res.json())
-      .then(data => setMenuItems(data));
-  }, []);
+  // useEffect(() => {
+  //   fetch("/api/getAllMenuItems")
+  //     .then(res => res.json())
+  //     .then(data => setMenuItems(data));
+  // }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -96,22 +96,11 @@ const Header = () => {
   return (
     <header
       className={`print:hidden ${pathName.includes("admin") ||
-        // pathName.includes("category") ||
         pathName.includes("page") ||
-        // pathName.includes("about-us") ||
-        // pathName.includes("contact") ||
-        // pathName.includes("privacy-policy") ||
-        // pathName.includes("refund-cancellation") ||
-        // pathName.includes("terms-condition") ||
-        // pathName.includes("shipping-policy") ||
-        // pathName.includes("product") ||
-        // pathName.includes("artisan") ||
-        // pathName.includes("cartDetails") ||
-        // pathName.includes("checkout") ||
-        // pathName.includes("search") ||
         pathName.includes("sign-up") ||
         pathName.includes("sign-in") ||
-        pathName.includes("customEnquiry")
+        pathName.includes("customEnquiry") ||
+        pathName.includes("vendor/login")
         ? "hidden"
         : "block"
         } bg-white text-black border-b sticky top-0 left-0 right-0 transition-all duration-300 font-barlow tracking-wider ease-in-out z-50 mx-auto w-full py-2
@@ -124,7 +113,7 @@ const Header = () => {
       </div>
       <div className="md:flex hidden items-center justify-between gap-8 border-b py-1 border-gray-400 md:px-8 ">
         <Link href={"/"}>
-          <img className="w-56 hover:scale-105 transition-all duration-300 ease-in-out object-contain drop-shadow-xl" src="/HeaderLogo.png" alt="Rishikesh Handmade" />
+          <img className="w-56 hover:scale-105 transition-all duration-300 ease-in-out object-contain drop-shadow-xl" src="/HeaderLogo.png" alt="Adventure Axis" />
         </Link>
         <div className="flex flex-row justify-center items-center gap-4">
           <div className="items-center z-50 gap-4 flex">
@@ -212,6 +201,13 @@ const Header = () => {
                           >
                             Create Account
                           </Link>
+                          <Link
+                            href="/vendor/login"
+                            onClick={() => setIsAuthDropdownOpen(false)}
+                            className="block px-4 py-2 hover:bg-blue-100 text-sm border-t border-gray-100"
+                          >
+                            Vendor Login
+                          </Link>
                         </motion.div>
                       )}
                     </AnimatePresence>
@@ -266,6 +262,15 @@ const Header = () => {
                   <span className="text-xs font-medium mt-1">Track Order</span>
                 </Link>
               </div>
+              <div className="flex items-center flex-col">
+                <Link
+                  href="/become_partner"
+                  className="flex flex-col items-center p-2 rounded-lg hover:bg-gray-200 transition-colors"
+                >
+                  <Handshake />
+                  <span className="text-xs font-medium">Become Partner</span>
+                </Link>
+              </div>
               {/* SearchBar aligned to the right */}
               <div className="group">
                 <SearchBar />
@@ -280,10 +285,10 @@ const Header = () => {
                 >
                   {/* <LanguageSelector /> */}
                   <Link href={"https://share.google/syyLiHaqdxlgGZoIH"}
-                  rel="noopener noreferrer"
-                  target="_blank"
+                    rel="noopener noreferrer"
+                    target="_blank"
                   >
-                  <Globe size={20}/>
+                    <Globe size={20} />
                   </Link>
                 </div>
               </div>
@@ -306,7 +311,7 @@ const Header = () => {
           <MenuBar menuItems={menuItems} />
         </div>
         <Link href={"/"}>
-          <img className="w-[150px] object-contain drop-shadow-xl" src="/HeaderLogo.png" alt="Rishikesh Handmade" />
+          <img className="w-[150px] object-contain drop-shadow-xl" src="/HeaderLogo.png" alt="Adventure Axis" />
         </Link>
 
         <div className="flex items-center gap-3">

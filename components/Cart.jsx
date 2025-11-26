@@ -9,13 +9,16 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
   const [tab, setTab] = useState(initialTab);
   const [show, setShow] = useState(true); // Always mount on first render
   const firstRender = React.useRef(true);
-  const { cart: rawCart, wishlist, setCart, setWishlist, updateCartQty, removeFromCart, removeFromWishlist, isClearing,clearCart } = useCart();
+  const { cart: rawCart, wishlist, setCart, setWishlist, updateCartQty, removeFromCart, removeFromWishlist, isClearing, clearCart } = useCart();
   const cart = Array.isArray(rawCart) ? rawCart : [];
   const { data: session, status } = useSession();
   const userId = session?.user?.id || session?.user?.email;
   const cartItems = Array.isArray(rawCart) ? rawCart : [];
   const cartTotal = cartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
   const isLoggedIn = status === "authenticated" && userId;
+  const isVendor = session?.user?.isVendor;
+
+  // console.log(cart)
 
   useEffect(() => {
     if (open) {
@@ -38,71 +41,10 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
       if (!open) setShow(false);
     }
   }, []);
-
-  // Sync cart to backend on change (DISABLED)
-  /*
-  useEffect(() => {
-    if (!isLoggedIn || !userId || isClearing) return; // Prevent sync when clearing
-    
-    // Only sync if cart actually changed
-    const currentCart = localStorage.getItem('cart');
-    const currentCartData = currentCart ? JSON.parse(currentCart) : [];
-    if (JSON.stringify(cart) !== JSON.stringify(currentCartData)) {
-      fetch("/api/sync-cart", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, cart }),
-      });
-    }
-  }, [cart, isLoggedIn, userId, isClearing]);
-  */
-
-  // Sync wishlist to backend on change
-  // useEffect(() => {
-  //   if (isLoggedIn) {
-  //     // console.log('[Cart.jsx] Syncing wishlist to backend', wishlist);
-  //     fetch("/api/sync-wishlist", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ userId, wishlist }),
-  //     });
-  //   }
-  // }, [wishlist, isLoggedIn, userId]);
-
-  // Fetch cart/wishlist from backend on mount if logged in
-  // useEffect(() => {
-  //   if (isLoggedIn && cart.length === 0 && !isClearing) {
-  //     fetch(`/api/sync-cart`, {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ userId, cart: [] }), // empty triggers fetch only
-  //     })
-  //       .then(res => res.json())
-  //       .then(data => {
-  //         if (data.cart) {
-  //           // console.log('[Cart.jsx] setCart from backend fetch', data.cart);
-  //           setCart(data.cart);
-  //         }
-  //       });
-  //   }
-  //   if (isLoggedIn && wishlist.length === 0) {
-  //     fetch(`/api/sync-wishlist`, {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       body: JSON.stringify({ userId, wishlist: [] }),
-  //     })
-  //       .then(res => res.json())
-  //       .then(data => {
-  //         if (data.wishlist) {
-  //           // console.log('[Cart.jsx] setWishlist from backend fetch', data.wishlist);
-  //           setWishlist(data.wishlist);
-  //         }
-  //       });
-  //   }
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [isLoggedIn, userId]);
-
-  const subtotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const subtotal = cart.reduce((sum, item) => {
+    const itemPrice = isVendor && item.vendorPrice ? item.vendorPrice : item.price;
+    return sum + (itemPrice * (item.qty || 1));
+  }, 0);
   if (!show || typeof window === "undefined") return null;
 
   return ReactDOM.createPortal(
@@ -147,11 +89,14 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto px-6 pt-4 pb-2">
-            {(tab === "cart" ? cart : wishlist).map((item, index) => (
-              <div key={`${item.id}_${item.size || 'N/A'}_${item.color || 'N/A'}_${index}`} className="flex items-center gap-4 py-4 border-b border-neutral-200 last:border-b-0">
+            {(tab === "cart" ? cart : wishlist).map((item, index) => {
+              const itemKey = `${item.id}-${item.size || ''}-${item.color || ''}`.toLowerCase().replace(/\s+/g, '-');
+              return (
+                <div key={itemKey} className="flex items-center gap-4 py-4 border-b border-neutral-200 last:border-b-0">
                 <img src={typeof item.image === "string" ? item.image : item.image?.url} alt={item.name} className="w-20 h-20 rounded-lg object-cover border" />
                 <div className="flex-1">
                   <div className="font-semibold text-base leading-tight mb-1">{item.name}</div>
+                  <div className="font-semibold text-xs leading-tight mb-1"> Size: {item?.size || "N/A"}</div>
                   {tab === "cart" && (
                     <div className="flex items-center gap-2 mt-2">
                       <button onClick={() => updateCartQty(item.id, Math.max(1, item.qty - 1))} className="w-8 h-8 rounded-full border flex items-center justify-center"><Minus size={18} /></button>
@@ -161,7 +106,13 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
                   )}
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <span className="font-semibold">₹{(item.price * (item.qty || 1)).toFixed(2)}</span>
+                  {isVendor && item.vendorPrice ? (
+                    <div className="flex flex-col items-end">
+                      <span className="font-semibold text-black">₹{(item.vendorPrice * (item.qty || 1)).toFixed(2)}</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold">₹{(item.price * (item.qty || 1)).toFixed(2)}</span>
+                  )}
                   {tab === "cart" ? (
                     <button onClick={async () => await removeFromCart(item.id)} className="text-neutral-400 hover:text-red-500">
                       <X size={18} />
@@ -173,7 +124,8 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Footer */}
@@ -186,9 +138,9 @@ export default function Cart({ open, onClose, initialTab = "cart" }) {
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex-1">
                   <div className="text-md font-semibold mb-1 text-center">
-                  "Almost Yours—Just One Step Left!"
+                    "Almost Yours—Just One Step Left!"
                   </div>
-                </div> 
+                </div>
               </div>
               <Link href="/cartDetails" className="block w-full">
                 <button

@@ -60,6 +60,13 @@ const data = {
       icon: User,
     },
     { divider: true },
+    {
+      name: "Partner Details",
+      url: "/admin/partner_details",
+      icon: User,
+    },
+    { divider: true },
+
 
     {
       name: "Add Direct Product",

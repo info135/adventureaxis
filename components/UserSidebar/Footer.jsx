@@ -159,7 +159,7 @@ const Footer = ({ className = "" }) => {
             </Card>
             <div className="flex flex-col lg:flex-row items-center justify-center max-w-[25rem] md:max-w-[60rem] xl:max-w-6xl mx-auto font-barlow">
                 <p className="text-gray-900 text-center my-4">
-                    &copy; <CurrentYear /> <Link href={'/'} className="hover:text-blue-600 font-bold">Rishikesh HandMade</Link>. All rights reserved
+                    &copy; <CurrentYear /> <Link href={'/'} className="hover:text-blue-600 font-bold">Adventure Axis</Link>. All rights reserved
                 </p>
             </div>
         </footer >

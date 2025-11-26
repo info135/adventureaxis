@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from "react";
 import { useCart } from "../context/CartContext";
 import Link from "next/link";
-import toast from "react-hot-toast"
-import { MapPin } from "lucide-react"
+import toast from "react-hot-toast";
+import { MapPin, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,16 +15,25 @@ import {
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 const CartDetails = () => {
+  // Handler for checkout navigation
+  const { data: session } = useSession();
+  const isVendor = session?.user?.isVendor;
   // 2. Get price after discount
   const getAfterDiscount = (item) => {
-    const base = item.originalPrice ?? item.price;
+    // Convert vendorPrice to number if it's a string
+    const vendorPrice = item.vendorPrice ? Number(item.vendorPrice) : undefined;
+    const base =
+      isVendor && vendorPrice !== undefined
+        ? vendorPrice
+        : item.originalPrice ?? item.price;
+
+    if (isVendor) return base; // Skip discount for vendors
     if (item.discountPercent) return base * (1 - item.discountPercent / 100);
     if (item.discountAmount) return base - item.discountAmount;
     return base;
   };
   const { cart: rawCart, updateCartQty, removeFromCart } = useCart();
   const cart = Array.isArray(rawCart) ? rawCart : [];
-  // console.log(cart)
 
   // Scroll to top when component mounts
   useEffect(() => {
@@ -34,59 +43,97 @@ const CartDetails = () => {
   // console.log(cart);
 
   const router = useRouter();
-
-  // Handler for checkout navigation
-  const { data: session } = useSession();
-
   const handleCheckout = () => {
-    if (!termsChecked) return;
+    if (!termsChecked) {
+      toast.error("Please accept the terms and conditions to proceed");
+      return;
+    }
     // First, ensure we have the latest cart data
     const currentCart = Array.isArray(rawCart) ? rawCart : [];
-
     // Collect all relevant cart data for checkout
     const checkoutData = {
       cart: currentCart.map((item) => ({
         ...item,
-        // include all important fields
-        discountPercent: item.discountPercent || null,
-        discountAmount: item.discountAmount || null,
+        price:
+          isVendor && item.vendorPrice !== undefined
+            ? item.vendorPrice
+            : item.originalPrice ?? item.price,
+        discountPercent: isVendor ? 0 : item.discountPercent || null,
+        discountAmount: isVendor ? 0 : item.discountAmount || null,
         cgst: item.cgst || 0,
         sgst: item.sgst || 0,
         originalPrice: item.originalPrice ?? item.price,
-        afterDiscount: getAfterDiscount(item),
+        afterDiscount: isVendor
+          ? item.vendorPrice ?? item.originalPrice ?? item.price
+          : getAfterDiscount(item),
       })),
-      subTotal: currentCart.reduce((sum, item) => sum + (item.originalPrice ?? item.price) * item.qty, 0),
-      totalDiscount: currentCart.reduce((sum, item) => {
-        const discount = item.discountPercent ?
-          (item.originalPrice ?? item.price) * (item.discountPercent / 100) :
-          (item.discountAmount || 0);
-        return sum + (discount * item.qty);
+      subTotal: currentCart.reduce((sum, item) => {
+        const price =
+          isVendor && item.vendorPrice !== undefined
+            ? item.vendorPrice
+            : item.originalPrice ?? item.price;
+        return sum + price * item.qty;
       }, 0),
+      totalDiscount: isVendor
+        ? 0
+        : currentCart.reduce((sum, item) => {
+            const basePrice =
+              isVendor && item.vendorPrice !== undefined
+                ? item.vendorPrice
+                : item.originalPrice ?? item.price;
+            const discount = item.discountPercent
+              ? basePrice * (item.discountPercent / 100)
+              : item.discountAmount || 0;
+            return sum + discount * item.qty;
+          }, 0),
       shipping: FinalShipping || 0,
-      pincode: pincodeResult?.pincode || null,
-      city: pincodeResult?.city || null,
-      state: pincodeResult?.state || null,
-      district: pincodeResult?.district || null,
       taxTotal: currentCart.reduce((sum, item) => {
-        const price = getAfterDiscount(item);
-        const tax = ((item.cgst || 0) + (item.sgst || 0)) / 100 * price * item.qty;
+        const price =
+          isVendor && item.vendorPrice !== undefined
+            ? item.vendorPrice
+            : item.originalPrice ?? item.price;
+        const tax =
+          (((item.cgst || 0) + (item.sgst || 0)) / 100) * price * item.qty;
         return sum + tax;
       }, 0),
       finalShipping: FinalShipping || 0,
       email: session?.user?.email || null,
+      isVendor: isVendor, // Include vendor status in checkout data
       promo: appliedPromoDetails
         ? {
-          code: appliedPromoDetails.couponCode,
-          percent: appliedPromoDetails.percent || null,
-          amount: appliedPromoDetails.amount || null,
-          discount: promoDiscount,
-        }
+            code: appliedPromoDetails.couponCode,
+            percent: appliedPromoDetails.percent || null,
+            amount: appliedPromoDetails.amount || null,
+            discount: promoDiscount,
+          }
         : null,
-      cartTotal: currentCart.reduce((sum, item) => {
-        const price = getAfterDiscount(item);
-        const tax = ((item.cgst || 0) + (item.sgst || 0)) / 100 * price;
-        return sum + (price + tax) * item.qty;
-      }, 0) + (FinalShipping || 0) - (promoDiscount || 0),
+      cartTotal:
+        currentCart.reduce((sum, item) => {
+          // For vendors, always use vendorPrice without any discounts
+          if (isVendor && item.vendorPrice !== undefined) {
+            const vendorPrice = Number(item.vendorPrice);
+            const tax =
+              (((item.cgst || 0) + (item.sgst || 0)) / 100) * vendorPrice;
+            return sum + (vendorPrice + tax) * item.qty;
+          }
+
+          // For regular users, apply discounts
+          const basePrice = item.originalPrice ?? item.price;
+          let finalPrice = basePrice;
+
+          // Apply item-level discounts if any
+          if (item.discountPercent) {
+            finalPrice = basePrice * (1 - item.discountPercent / 100);
+          } else if (item.discountAmount) {
+            finalPrice = basePrice - item.discountAmount;
+          }
+
+          const tax =
+            (((item.cgst || 0) + (item.sgst || 0)) / 100) * finalPrice;
+          return sum + (finalPrice + tax) * item.qty;
+        }, 0) +
+        (FinalShipping || 0) -
+        (isVendor ? 0 : promoDiscount || 0),
     };
 
     // Save to localStorage before navigation
@@ -95,19 +142,20 @@ const CartDetails = () => {
     // Redirect to checkout
     router.push("/checkout");
   };
-
   const [promoCode, setPromoCode] = React.useState("");
   const [promoError, setPromoError] = React.useState("");
   const [termsChecked, setTermsChecked] = React.useState(false);
   // Calculate total cart weight in grams
-  // Calculate total cart weight in grams (weight is number from DB)
-  const totalWeight = cart.reduce((sum, item) => sum + ((typeof item.weight === "number" ? item.weight : 0) * item.qty), 0);
+  // Calculate total cart weight in grams (weight is number from DB in kg, convert to grams)
+  const totalWeight = cart.reduce(
+    (sum, item) =>
+      sum +
+      (typeof item.weight === "number" ? item.weight : 0) * item.qty * 1000,
+    0
+  );
+  // console.log(totalWeight);
 
-
-  const [pincode, setPincode] = React.useState("");
-  const [pincodeResult, setPincodeResult] = React.useState(null);
   const [pincodeError, setPincodeError] = React.useState("");
-  const [isCheckingPincode, setIsCheckingPincode] = React.useState(false);
   const [appliedPromo, setAppliedPromo] = React.useState(null); // to track applied promo
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const totalAfterDiscount = Array.isArray(cart)
@@ -125,17 +173,6 @@ const CartDetails = () => {
   const [FinalShipping, setFinalShipping] = useState(0);
   const [shippingTierLabel, setShippingTierLabel] = useState("");
   const [shippingPerUnit, setShippingPerUnit] = useState(null);
-  const [statesList, setStatesList] = useState([]);
-
-  // Restore delivery location from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem('deliveryLocation');
-    if (saved) {
-      const loc = JSON.parse(saved);
-      setPincodeInput(loc.pincode);
-      setPincodeResult(loc);
-    }
-  }, []);
 
   useEffect(() => {
     const fetchShippingCharge = async () => {
@@ -147,12 +184,13 @@ const CartDetails = () => {
       }
       setLoadingShipping(true);
       try {
-        const res = await fetch('/api/checkShipping', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/checkShipping", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ weight: totalWeight }),
         });
         const data = await res.json();
+        // console.log(data);
         if (data.available && data.shippingCharge != null) {
           setFinalShipping(Number(data.shippingCharge));
           setShippingTierLabel(data.tierLabel || "");
@@ -172,27 +210,6 @@ const CartDetails = () => {
     fetchShippingCharge();
   }, [cart, totalWeight]);
 
-  useEffect(() => {
-    // Fetch states/districts from API on mount
-    const fetchStates = async () => {
-      try {
-        const res = await fetch('/api/zipcode');
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setStatesList(data.data);
-        }
-      } catch (e) {
-        setStatesList([]);
-      }
-    };
-
-    fetchStates();
-  }, []);
-
-  const handleApplyPincode = () => {
-    setIsPincodeConfirmModalOpen(false);
-    // The pincodeResult is already set, so shipping charges will be updated
-  };
   // Coupon apply handler
   const handleApplyPromo = async () => {
     // Defensive: ensure cart is defined and is an array
@@ -270,37 +287,38 @@ const CartDetails = () => {
     return null;
   });
   const getAmount = (item) => {
-    const afterDiscount = getAfterDiscount(item);
-    const cgstPercent = Number(item.cgst) || 0;
-    const sgstPercent = Number(item.sgst) || 0;
-
-    const cgstAmount = (afterDiscount * cgstPercent) / 100;
-    const sgstAmount = (afterDiscount * sgstPercent) / 100;
-
-    const totalPerItem = afterDiscount + cgstAmount + sgstAmount;
-    return totalPerItem * item.qty;
+    const price =
+      isVendor && item.vendorPrice !== undefined
+        ? item.vendorPrice
+        : item.originalPrice ?? item.price;
+    return (price * item.qty).toFixed(2);
   };
-
   // 5. For entire cart
   const subTotal = Array.isArray(cart)
-    ? cart.reduce(
-      (sum, item) => sum + (item.originalPrice ?? item.price) * item.qty,
-      0
-    )
+    ? cart.reduce((sum, item) => {
+        const price =
+          isVendor && item.vendorPrice !== undefined
+            ? item.vendorPrice
+            : item.originalPrice ?? item.price;
+        return sum + price * item.qty;
+      }, 0)
     : 0;
   const totalDiscount = Array.isArray(cart)
-    ? cart.reduce(
-      (sum, item) =>
-        sum +
-        (item.discountPercent
-          ? (item.originalPrice ?? item.price) * (item.discountPercent / 100)
-          : item.discountAmount || 0) *
-        item.qty,
-      0
-    )
+    ? cart.reduce((sum, item) => {
+        const basePrice =
+          isVendor && item.vendorPrice !== undefined
+            ? item.vendorPrice
+            : item.originalPrice ?? item.price;
+
+        const discount = item.discountPercent
+          ? basePrice * (item.discountPercent / 100)
+          : item.discountAmount || 0;
+
+        return sum + discount * item.qty;
+      }, 0)
     : 0;
 
-  const finalShipping = pincodeResult?.price || FinalShipping || 0;
+  const finalShipping = FinalShipping || 0;
 
   // Remove promo if a discounted/coupon item is present
   const hasDiscountedItem = cart.some(
@@ -320,7 +338,7 @@ const CartDetails = () => {
     if (appliedPromoDetails.percent) {
       promoDiscount = Math.round(
         (totalAfterDiscount + taxTotal + finalShipping) *
-        (appliedPromoDetails.percent / 100)
+          (appliedPromoDetails.percent / 100)
       );
     } else if (appliedPromoDetails.amount) {
       promoDiscount = appliedPromoDetails.amount;
@@ -329,16 +347,50 @@ const CartDetails = () => {
     const maxDiscount = totalAfterDiscount + taxTotal + finalShipping;
     if (promoDiscount > maxDiscount) promoDiscount = maxDiscount;
   }
-  const taxTotal = cart.reduce(
-    (sum, item) =>
-      sum +
-      ((getAfterDiscount(item) *
-        ((Number(item.cgst) || 0) + (Number(item.sgst) || 0))) /
-        100) *
-      item.qty,
-    0
-  );
-  const finalAmount = totalAfterDiscount + taxTotal + FinalShipping - (promoDiscount || 0);
+  const taxTotal = cart.reduce((sum, item) => {
+    const vendorPrice = item.vendorPrice ? Number(item.vendorPrice) : undefined;
+    // For vendors, use vendorPrice; for non-vendors, use after-discount price
+    const price =
+      isVendor && vendorPrice !== undefined
+        ? vendorPrice
+        : getAfterDiscount(item);
+
+    const cgst = Number(item.cgst) || 0;
+    const sgst = Number(item.sgst) || 0;
+    const itemTax = ((cgst + sgst) / 100) * price;
+
+    return sum + itemTax * item.qty;
+  }, 0);
+
+  const [finalAmount, setFinalAmount] = useState(0);
+
+  // Recalculate final amount when dependencies change
+  useEffect(() => {
+    const amount = isVendor
+      ? cart.reduce((sum, item) => {
+          // Use vendorPrice if available, otherwise fall back to originalPrice or price
+          const vendorPrice = item.vendorPrice
+            ? Number(item.vendorPrice)
+            : item.originalPrice ?? item.price;
+          const cgst = Number(item.cgst) || 0;
+          const sgst = Number(item.sgst) || 0;
+          const itemTax = ((cgst + sgst) / 100) * vendorPrice;
+          const itemTotal = (vendorPrice + itemTax) * item.qty;
+          return sum + itemTotal;
+        }, 0) + FinalShipping
+      : totalAfterDiscount +
+        taxTotal +
+        FinalShipping -
+        (isVendor ? 0 : promoDiscount || 0);
+    setFinalAmount(amount);
+  }, [
+    isVendor,
+    cart,
+    totalAfterDiscount,
+    taxTotal,
+    FinalShipping,
+    promoDiscount,
+  ]);
 
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => {
@@ -354,7 +406,9 @@ const CartDetails = () => {
       </div>
       {cart.length === 0 ? (
         <div className="text-center text-gray-500 py-8">
-          <Link href="/" className="text-green-700 font-semibold text-sm">Continue Shopping &gt;&gt;</Link>
+          <Link href="/" className="text-green-700 font-semibold text-sm">
+            Continue Shopping &gt;&gt;
+          </Link>
           Your cart is empty.
         </div>
       ) : (
@@ -367,11 +421,13 @@ const CartDetails = () => {
                 <thead>
                   <tr className="bg-blue-200 text-black text-sm">
                     <th className="border p-2">Image</th>
-                    <th className="border p-2">Name / Code</th>
+                    <th className="border p-2">Name</th>
                     <th className="border p-2">Base Price</th>
-                    <th className="border p-2">Discount</th>
-                    <th className="border p-2">After Discount</th>
-                    <th className="border p-2">Weight (Kg)</th>
+                    {!isVendor && <th className="border p-2">Discount</th>}
+                    {!isVendor && (
+                      <th className="border p-2">After Discount</th>
+                    )}
+                    <th className="border p-2">Weight</th>
                     <th className="border p-2">CGST %</th>
                     <th className="border p-2">SGST %</th>
                     <th className="border p-2">Qty</th>
@@ -381,34 +437,111 @@ const CartDetails = () => {
                 </thead>
                 <tbody>
                   {cart.map((item, idx) => (
-                    <tr key={item.id} className={idx % 2 === 0 ? "bg-orange-100" : "bg-gray-100"}>
+                    <tr
+                      key={item.id}
+                      className={
+                        idx % 2 === 0 ? "bg-orange-100" : "bg-gray-100"
+                      }
+                    >
                       <td className="border p-2 text-center">
-                        <img src={item.image?.url || item.image} alt={item.name} className="w-20 h-20 rounded object-cover mx-auto" />
+                        <img
+                          src={item.image?.url || item.image}
+                          alt={item.name}
+                          className="w-20 h-20 rounded object-cover mx-auto"
+                        />
                       </td>
                       <td className="border p-2 text-center">
-                        <div className="font-bold text-base leading-tight">{item.name}</div>
-                        <div className="italic text-base text-black">{item.productCode || "N/A"}</div>
-                      </td>
-                      <td className="border p-2 text-center">₹{item.originalPrice ?? item.price}</td>
-                      <td className="border p-2 text-center">{getDiscount(item)}</td>
-                      <td className="border p-2 text-center">₹{getAfterDiscount(item)}</td>
-                      <td className="border p-2 text-center">
-                        {item.weight !== undefined && item.weight !== null 
-                          ? Number(item.weight).toLocaleString() 
-                          : '0.000'} kg
-                      </td>
-                      <td className="border p-2 text-center">₹{(item.price * item.cgst / 100).toFixed(2)}</td>
-                      <td className="border p-2 text-center">₹{(item.price * item.sgst / 100).toFixed(2)}</td>
-                      <td className="border p-2 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <button onClick={() => updateCartQty(item.id, Math.max(1, item.qty - 1))} className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center">-</button>
-                          <span className="w-7 text-center font-semibold">{item.qty}</span>
-                          <button onClick={() => updateCartQty(item.id, item.qty + 1)} className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center">+</button>
+                        <div className="font-bold text-sm leading-tight">
+                          {item.name}
+                        </div>
+                        <div className="italic text-start text-sm text-black">
+                         <span className="font-bold">Code:</span> {item.productCode || "N/A"}
+                        </div>
+                        <div className="italic text-start text-sm text-black">
+                          <span className="font-bold">Size:</span> {item.size || "N/A"}
                         </div>
                       </td>
-                      <td className="border p-2 text-center font-bold">₹{getAmount(item)}</td>
                       <td className="border p-2 text-center">
-                        <button onClick={() => removeFromCart(item.id)} className="bg-red-500 hover:bg-red-600 text-white rounded-full w-8 h-8 text-xl flex items-center justify-center" title="Remove">
+                        {isVendor && item.vendorPrice !== undefined ? (
+                          <div className="flex flex-col items-center">
+                            <span className="text-sm line-through text-gray-500">
+                              ₹{item.originalPrice ?? item.price}
+                            </span>
+                            <span className="text-black font-semibold">
+                              ₹{item.vendorPrice}
+                            </span>
+                          </div>
+                        ) : (
+                          `₹${item.originalPrice ?? item.price}`
+                        )}
+                      </td>
+                      {!isVendor && (
+                        <td className="border p-2 text-center">
+                          {getDiscount(item)}
+                        </td>
+                      )}
+                      {!isVendor && (
+                        <td className="border p-2 text-center">
+                          ₹{getAfterDiscount(item)}
+                        </td>
+                      )}
+                      <td className="border p-2 text-center">
+                        {item.weight
+                          ? Number(item.weight) < 1
+                            ? `${(Number(item.weight) * 1000).toFixed(0)}g`
+                            : `${Number(item.weight).toFixed(3)} kg`
+                          : "0g"}
+                      </td>
+                      <td className="border p-2 text-center">
+                        ₹
+                        {(
+                          ((isVendor && item.vendorPrice !== undefined
+                            ? item.vendorPrice
+                            : item.price) *
+                            (item.cgst || 0)) /
+                          100
+                        ).toFixed(2)}
+                      </td>
+                      <td className="border p-2 text-center">
+                        ₹
+                        {(
+                          ((isVendor && item.vendorPrice !== undefined
+                            ? item.vendorPrice
+                            : item.price) *
+                            (item.sgst || 0)) /
+                          100
+                        ).toFixed(2)}
+                      </td>
+                      <td className="border p-2 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() =>
+                              updateCartQty(item.id, Math.max(1, item.qty - 1))
+                            }
+                            className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
+                          >
+                            -
+                          </button>
+                          <span className="w-7 text-center font-semibold">
+                            {item.qty}
+                          </span>
+                          <button
+                            onClick={() => updateCartQty(item.id, item.qty + 1)}
+                            className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </td>
+                      <td className="border p-2 text-center font-bold">
+                        ₹{getAmount(item)}
+                      </td>
+                      <td className="border p-2 text-center">
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white rounded-full w-8 h-8 text-xl flex items-center justify-center"
+                          title="Remove"
+                        >
                           &#10006;
                         </button>
                       </td>
@@ -419,82 +552,125 @@ const CartDetails = () => {
             </div>
             <div className="md:hidden flex">
               <div className="w-full border-collapse rounded overflow-hidden shadow text-xs md:text-base">
-                  <div className="md:hidden flex flex-col gap-4">
-                    {cart.map((item, idx) => (
-                      <div
-                        key={item.id}
-                        className={`grid grid-cols-2 gap-2 p-2 rounded shadow ${idx % 2 === 0 ? "bg-orange-100" : "bg-gray-100"
-                          }`}
-                      >
-                        {/* Left Column: Image + Quantity */}
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <img
-                            src={item.image?.url || item.image}
-                            alt={item.name}
-                            className="w-32 h-32 object-contain rounded"
-                          />
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateCartQty(item.id, Math.max(1, item.qty - 1))}
-                              className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
-                            >
-                              -
-                            </button>
-                            <span className="w-7 text-center font-semibold">{item.qty}</span>
-                            <button
-                              onClick={() => updateCartQty(item.id, item.qty + 1)}
-                              className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Right Column: Product Info */}
-                        <div className="text-sm space-y-1">
-                          <div>
-                            <span className="font-semibold">Name:</span> {item.name}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Code:</span> {item.productCode || "N/A"}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Base Price:</span> ₹{item.originalPrice ?? item.price}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Discount:</span> {getDiscount(item)}
-                          </div>
-                          <div>
-                            <span className="font-semibold">After Discount:</span> ₹{getAfterDiscount(item)}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Weight:</span> {item.weight ?? 0}g
-                          </div>
-                          <div>
-                            <span className="font-semibold">CGST:</span> ₹{(item.price * item.cgst / 100).toFixed(2)}
-                          </div>
-                          <div>
-                            <span className="font-semibold">SGST:</span> ₹{(item.price * item.sgst / 100).toFixed(2)}
-                          </div>
-                          <div>
-                            <span className="font-semibold">Total:</span> ₹{getAmount(item)}
-                          </div>
+                <div className="md:hidden flex flex-col gap-4">
+                  {cart.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className={`grid grid-cols-2 gap-2 p-2 rounded shadow ${
+                        idx % 2 === 0 ? "bg-orange-100" : "bg-gray-100"
+                      }`}
+                    >
+                      {/* Left Column: Image + Quantity */}
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <img
+                          src={item.image?.url || item.image}
+                          alt={item.name}
+                          className="w-32 h-32 object-contain rounded"
+                        />
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => removeFromCart(item.id)}
-                            className="mt-2 bg-red-500 hover:bg-red-600 text-white rounded px-3 py-1 text-sm"
+                            onClick={() =>
+                              updateCartQty(item.id, Math.max(1, item.qty - 1))
+                            }
+                            className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
                           >
-                            Remove
+                            -
+                          </button>
+                          <span className="w-7 text-center font-semibold">
+                            {item.qty}
+                          </span>
+                          <button
+                            onClick={() => updateCartQty(item.id, item.qty + 1)}
+                            className="w-7 h-7 bg-black text-white rounded-full flex items-center justify-center"
+                          >
+                            +
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
+
+                      {/* Right Column: Product Info */}
+                      <div className="text-sm space-y-1">
+                        <div>
+                          <span className="font-semibold">Name:</span>{" "}
+                          {item.name}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Code:</span>{" "}
+                          {item.productCode || "N/A"}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Size:</span>{" "}
+                          {item.size || "N/A"}
+                        </div>
+                        <div className="border p-2 text-center">
+                          {isVendor && item.vendorPrice !== undefined ? (
+                            <div className="flex flex-col items-center">
+                              <span className="text-sm line-through text-gray-500">
+                                ₹{item.originalPrice ?? item.price}
+                              </span>
+                              <span className="text-black font-semibold">
+                                ₹{item.vendorPrice}
+                              </span>
+                            </div>
+                          ) : (
+                            `₹${item.originalPrice ?? item.price}`
+                          )}
+                        </div>
+                        {!isVendor && (
+                          <div>
+                            <span className="font-semibold">Discount:</span>{" "}
+                            {getDiscount(item)}
+                          </div>
+                        )}
+                        {!isVendor && (
+                          <div>
+                            <span className="font-semibold">
+                              After Discount:
+                            </span>{" "}
+                            ₹{getAfterDiscount(item)}
+                          </div>
+                        )}
+                        <div>
+                          <span className="font-semibold">Weight:</span>{" "}
+                          {item.weight ?? 0}kg
+                        </div>
+                        <div className="border p-2 text-center">
+                          ₹
+                          {(
+                            ((isVendor && item.vendorPrice !== undefined
+                              ? item.vendorPrice
+                              : item.price) *
+                              (item.cgst || 0)) /
+                            100
+                          ).toFixed(2)}
+                        </div>
+                        <div className="border p-2 text-center">
+                          ₹
+                          {(
+                            ((isVendor && item.vendorPrice !== undefined
+                              ? item.vendorPrice
+                              : item.price) *
+                              (item.sgst || 0)) /
+                            100
+                          ).toFixed(2)}
+                        </div>
+                        <div>
+                          <span className="font-semibold">Total:</span> ₹
+                          {getAmount(item)}
+                        </div>
+                        <button
+                          onClick={() => removeFromCart(item.id)}
+                          className="mt-2 bg-red-500 hover:bg-red-600 text-white rounded px-3 py-1 text-sm"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
-
-
           </div>
-
 
           {/* Right: Order Summary Card */}
           <div className="w-full md:w-1/2 flex flex-col gap-2 mt-8 md:mt-0">
@@ -516,12 +692,14 @@ const CartDetails = () => {
               </div>
 
               {/* Discount Amount */}
-              <div className="flex justify-between items-center mt-2 mb-1">
-                <span className="font-bold text-base">Discount Amount</span>
-                <span className="font-bold text-base">
-                  ₹{Math.max(0, totalDiscount).toFixed(2)}
-                </span>
-              </div>
+              {!isVendor && (
+                <div className="flex justify-between items-center mt-2 mb-1">
+                  <span className="font-bold text-base">Discount Amount</span>
+                  <span className="font-bold text-base">
+                    ₹{Math.max(0, totalDiscount).toFixed(2)}
+                  </span>
+                </div>
+              )}
               {appliedPromoDetails && (
                 <div className="flex justify-between items-center mb-1 text-green-700">
                   <span className="font-bold text-base">
@@ -533,204 +711,108 @@ const CartDetails = () => {
                 </div>
               )}
               <hr className="my-2" />
+              {!isVendor && (
+                <>
+                  {/* Promo Code Section */}
+                  <div className="text-center font-semibold text-lg mb-2">
+                    Have a promo code?
+                  </div>
+                  {appliedPromo && (
+                    <div className="text-green-700 text-xs mt-1">
+                      Promo code "{appliedPromo}" applied successfully!
+                    </div>
+                  )}
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      placeholder="Apply Promo Code"
+                      className="w-full border border-blue-400 bg-blue-100 px-3 py-2 rounded text-gray-700"
+                      value={promoCode}
+                      onChange={(e) => {
+                        setPromoCode(e.target.value);
+                        setPromoError("");
+                      }}
+                      disabled={!!appliedPromo}
+                    />
 
-              {/* Promo Code Section */}
-              <div className="text-center font-semibold text-lg mb-2">
-                Have a promo code?
-              </div>
-              {appliedPromo && (
-                <div className="text-green-700 text-xs mt-1">
-                  Promo code "{appliedPromo}" applied successfully!
-                </div>
-              )}
-              <div className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  placeholder="Apply Promo Code"
-                  className="w-full border border-blue-400 bg-blue-100 px-3 py-2 rounded text-gray-700"
-                  value={promoCode}
-                  onChange={(e) => {
-                    setPromoCode(e.target.value);
-                    setPromoError("");
-                  }}
-                  disabled={!!appliedPromo}
-                />
-
-                <button
-                  className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700"
-                  onClick={handleApplyPromo}
-                  disabled={!promoCode || !!appliedPromo}
-                >
-                  Apply
-                </button>
-              </div>
-
-
-              {/* Note about coupons */}
-              <div className="text-xs text-red-600 mb-2">
-                Note : If discount promo code already applied extra additional
-                coupon not applicable
-              </div>
-              {/* Nice! You saved... */}
-              {totalDiscount > 0 && (
-                <div className="bg-gray-100 rounded px-2 py-1 text-center text-sm font-semibold text-black mb-2">
-                  🎉 Nice! You saved{" "}
-                  <span className="font-bold">₹{totalDiscount.toFixed(2)}</span>{" "}
-                  on your order.
-                </div>
-              )}
-              {promoError && (
-                <div className="text-xs text-red-600 mt-1">{promoError}</div>
+                    <button
+                      className="bg-blue-600 text-white px-4 py-2 rounded font-bold hover:bg-blue-700"
+                      onClick={handleApplyPromo}
+                      disabled={!promoCode || !!appliedPromo}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {/* Note about coupons */}
+                  <div className="text-xs text-red-600 mb-2">
+                    Note : If discount promo code already applied extra
+                    additional coupon not applicable
+                  </div>
+                  {/* Nice! You saved... */}
+                  {totalDiscount > 0 && (
+                    <div className="bg-gray-100 rounded px-2 py-1 text-center text-sm font-semibold text-black mb-2">
+                      🎉 Nice! You saved{" "}
+                      <span className="font-bold">
+                        ₹{totalDiscount.toFixed(2)}
+                      </span>{" "}
+                      on your order.
+                    </div>
+                  )}
+                  {promoError && (
+                    <div className="text-xs text-red-600 mt-1">
+                      {promoError}
+                    </div>
+                  )}
+                </>
               )}
               {/* Shipping Charges */}
               <div className="flex justify-between items-center mt-2">
                 <span className="font-semibold">
-                  Shipping Charges{shippingTierLabel ? ` (${shippingTierLabel})` : ''}
+                  Shipping Charges
+                  {shippingTierLabel ? ` (${shippingTierLabel})` : ""}
                 </span>
                 <span className="font-semibold">
                   ₹{FinalShipping.toFixed(2)}
                 </span>
               </div>
-              {/* Pincode check UI */}
-              <div className="">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-base font-medium flex items-center gap-1">
-                    <MapPin size={18} className="inline-block" />
-                    Delivery Options
-                  </span>
-                </div>
-                {!pincodeResult ? (
-                  <div className="border rounded px-4 py-3 flex items-center gap-2 bg-white max-w-xs">
-                    <input
-                      type="text"
-                      className="flex-1 bg-transparent outline-none text-gray-700"
-                      placeholder="Enter pincode"
-                      value={pincodeInput}
-                      onChange={e => setPincodeInput(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                      maxLength={6}
-                    />
-                    <button
-                      className="text-blue-900 font-semibold ml-2"
-                      disabled={loadingShipping || pincodeInput.length !== 6}
-                      onClick={async () => {
-                        setPincodeError('');
-                        setLoadingShipping(true);
-                        setPincodeResult(null);
-                        try {
-                          const res = await fetch('/api/zipcode/checkZip', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ pincode: pincodeInput }),
-                          });
-                          const data = await res.json();
-                          if (data.success) {
-                            setPincodeResult(data);
-                            setPincodeError("");
-                            // Persist delivery location to localStorage
-                            localStorage.setItem('deliveryLocation', JSON.stringify({
-                              pincode: data.pincode,
-                              city: data.city,
-                              state: data.state,
-                              district: data.district
-                            }));
-                            setIsPincodeModalOpen(false);
-                            setIsPincodeConfirmModalOpen(true);
-                          } else {
-                            setPincodeError(data.message || 'Delivery not available');
-                          }
-                        } catch {
-                          setPincodeError('Server error. Please try again.');
-                        } finally {
-                          setLoadingShipping(false);
-                        }
-                      }}
-                    >
-                      {loadingShipping ? 'Checking...' : 'Check'}
-                    </button>
-                  </div>
-                ) : (
-                  <div className="border rounded px-4 py-3 bg-white w-fit">
-                    <div className="flex items-center gap-2 mb-2">
-                      <MapPin size={18} className="inline-block" />
-                      <span className="font-semibold">Delivery options for {pincodeResult.pincode}</span>
-                      <button
-                        className="ml-auto px-2 py-1 border rounded border-black text-sm"
-                        onClick={() => {
-                          setPincodeInput('');
-                          setPincodeResult(null);
-                        }}
-                      >
-                        Change
-                      </button>
-                    </div>
-                    <div className="mb-1 text-sm">
-                      Shipping to: <span className="font-semibold">{pincodeResult.city || pincodeResult.district}, {pincodeResult.state}, India</span>
-                    </div>
-                  </div>
-                )}
-                {pincodeError && (
-                  <div className="text-red-600 text-xs mt-1">
-                    {pincodeError}
-                  </div>
-                )}
-              </div>
-
-              {/* PIN Code Confirmation Modal */}
-              <Dialog
-                open={isPincodeConfirmModalOpen}
-                onOpenChange={setIsPincodeConfirmModalOpen}
-              >
-                <DialogContent className="bg-white rounded-lg max-w-md">
-                  <DialogHeader>
-                    <DialogTitle className="text-center text-xl font-bold">
-                      Yes, we've confirmed!
-                    </DialogTitle>
-                  </DialogHeader>
-
-                  <div className="mt-4 space-y-4">
-                    <p className="text-center">
-                      Your area PIN code is available for shipping.
-                      <br />
-                      You can proceed with your order, and we'll
-                      <br />
-                      ensure a smooth and timely delivery.
-                    </p>
-
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="text-right font-semibold">State</div>
-                      <div className="col-span-2 border-b border-gray-300">
-                        {pincodeResult?.state}
-                      </div>
-
-                      <div className="text-right font-semibold">Distt.</div>
-                      <div className="col-span-2 border-b border-gray-300">
-                        {pincodeResult?.district}
-                      </div>
-
-                      <div className="text-right font-semibold">PIN Code</div>
-                      <div className="col-span-2 border-b border-gray-300">
-                        {pincodeResult?.pincode}
-                      </div>
-                    </div>
-
-                    <button
-                      className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-md transition-colors"
-                      onClick={handleApplyPincode}
-                    >
-                      Apply Now
-                    </button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
               {/* Total CGST/SGST */}
               <div className="flex justify-between items-center text-sm mb-2">
-                <span className="text-gray-600">Total CGST ({cart[0]?.cgst || 0}%)</span>
-                <span className="text-gray-900 font-medium">₹{cart.reduce((total, item) => total + (item.price * item.cgst / 100 * item.qty), 0).toFixed(2)}</span>
+                <span className="text-gray-600">
+                  Total CGST ({cart[0]?.cgst || 0}%)
+                </span>
+                <span className="text-gray-900 font-medium">
+                  ₹
+                  {cart
+                    .reduce((total, item) => {
+                      const price =
+                        isVendor && item.vendorPrice !== undefined
+                          ? item.vendorPrice
+                          : item.price;
+                      return (
+                        total + ((price * (item.cgst || 0)) / 100) * item.qty
+                      );
+                    }, 0)
+                    .toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm mb-2">
-                <span className="text-gray-600">Total SGST ({cart[0]?.sgst || 0}%)</span>
-                <span className="text-gray-900 font-medium">₹{cart.reduce((total, item) => total + (item.price * item.sgst / 100 * item.qty), 0).toFixed(2)}</span>
+                <span className="text-gray-600">
+                  Total SGST ({cart[0]?.sgst || 0}%)
+                </span>
+                <span className="text-gray-900 font-medium">
+                  ₹
+                  {cart
+                    .reduce((total, item) => {
+                      const price =
+                        isVendor && item.vendorPrice !== undefined
+                          ? item.vendorPrice
+                          : item.price;
+                      return (
+                        total + ((price * (item.sgst || 0)) / 100) * item.qty
+                      );
+                    }, 0)
+                    .toFixed(2)}
+                </span>
               </div>
               <hr className="my-2" />
 
@@ -755,12 +837,8 @@ const CartDetails = () => {
               </div>
               <button
                 className="w-full py-3 bg-orange-500 text-white font-bold text-base hover:bg-orange-600 mb-2"
-                disabled={!termsChecked || !pincodeResult}
+                disabled={!termsChecked}
                 onClick={() => {
-                  if (!pincodeResult) {
-                    toast.error('Please check your pincode before proceeding.');
-                    return;
-                  }
                   handleCheckout();
                 }}
               >
@@ -847,7 +925,7 @@ const CartDetails = () => {
                 <span className="font-semibold">Quality You Can Trust</span>
               </div>
               <div className="text-xs text-gray-600 mt-1 max-w-xs text-center">
-                Your Rishikesh Handmade Guides are available 24/7/365 to answer
+                Your Adventure Axis Guides are available 24/7/365 to answer
                 your question and help you better understand your purchase.
               </div>
             </div>

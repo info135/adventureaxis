@@ -9,12 +9,14 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+import { useMenu } from "@/context/MenuContext";
 
 // CategoryCarousel: displays categories in a row carousel (5 per row)
 export const CategoryCarousel = ({ categories = [] }) => {
   if (!Array.isArray(categories) || categories.length === 0) {
-    return <div>No categories found.</div>;
+    return null;
   }
+
   return (
     <Carousel className={`w-full md:w-[95%] mx-auto my-4 ${categories.length > 0 ? "block" : "hidden"}`}>
       <CarouselContent className="w-full gap-2">

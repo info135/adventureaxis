@@ -15,7 +15,7 @@ import {
   DialogTrigger,
   DialogClose
 } from '@/components/ui/dialog';
-import { Plus, Trash2,Loader2, Image as ImageIcon, X } from 'lucide-react';
+import { Plus, Trash2, Loader2, Image as ImageIcon, X } from 'lucide-react';
 import Image from 'next/image';
 const QuantityManagement = ({ productData, productId }) => {
   // Remove a row by index, but always keep at least one row
@@ -30,16 +30,16 @@ const QuantityManagement = ({ productData, productId }) => {
           body: JSON.stringify({ publicId: row.profileImage.key })
         });
       } catch (err) {
-        console.error('Error deleting profile image:', err);
+        // console.error('Error deleting profile image:', err);
       }
     }
-    
+
     if (row.subImages?.length > 0) {
       try {
         await Promise.all(
           row.subImages
             .filter(img => img?.key)
-            .map(img => 
+            .map(img =>
               fetch('/api/cloudinary', {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
@@ -48,19 +48,20 @@ const QuantityManagement = ({ productData, productId }) => {
             )
         );
       } catch (err) {
-        console.error('Error deleting sub images:', err);
+        // console.error('Error deleting sub images:', err);
       }
     }
-    
+
     setRows(rows => rows.length > 1 ? rows.filter((_, i) => i !== idx) : rows);
   };
 
   const [rows, setRows] = useState([
-    { 
-      size: '', 
-      price: '', 
-      qty: '', 
-      color: '', 
+    {
+      size: '',
+      price: '',
+      qty: '',
+      vendorPrice: '',
+      color: '',
       weight: '', // always in grams
       profileImage: null,      // { url, key }
       subImages: [],          // array of { url, key }
@@ -105,32 +106,32 @@ const QuantityManagement = ({ productData, productId }) => {
       // console.log('No file selected');
       return;
     }
-    
+
     // console.log('Selected file:', file.name, 'Size:', file.size, 'Type:', file.type);
-    
+
     // Create preview URL
     const previewUrl = URL.createObjectURL(file);
-    
+
     // Reset file input
     event.target.value = '';
-    
+
     // Get the current row and old image key
     const currentRow = rows[rowIdx];
     const oldImageKey = currentRow?.profileImage?.key;
-    
+
     // Set uploading state with preview
-    setRows(prevRows => 
-      prevRows.map((row, i) => 
-        i === rowIdx 
-          ? { 
-              ...row, 
-              uploadingProfile: true,
-              profileImage: { url: previewUrl, key: 'uploading', isPreview: true }
-            } 
+    setRows(prevRows =>
+      prevRows.map((row, i) =>
+        i === rowIdx
+          ? {
+            ...row,
+            uploadingProfile: true,
+            profileImage: { url: previewUrl, key: 'uploading', isPreview: true }
+          }
           : row
       )
     );
-    
+
     // Update modal state if open
     if (imageModal.open && imageModal.rowIndex === rowIdx) {
       setImageModal(prev => ({
@@ -142,7 +143,7 @@ const QuantityManagement = ({ productData, productId }) => {
         }
       }));
     }
-    
+
     try {
       // First, delete the old image if it exists
       if (oldImageKey) {
@@ -153,64 +154,64 @@ const QuantityManagement = ({ productData, productId }) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ publicId: oldImageKey })
           });
-          
+
           if (!deleteResponse.ok) {
             const error = await deleteResponse.text();
-            console.error('Error deleting old image:', error);
+            // console.error('Error deleting old image:', error);
             // Continue with upload even if delete fails
           }
         } catch (err) {
-          console.error('Error in delete request:', err);
+          // console.error('Error in delete request:', err);
           // Continue with upload even if delete fails
         }
       }
-      
+
       // Upload new image
       // console.log('Uploading new image...');
       const formData = new FormData();
       formData.append('file', file);
-      
+
       const response = await fetch('/api/cloudinary', {
         method: 'POST',
         body: formData,
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('Upload failed with status:', response.status, 'Error:', errorText);
+        // console.error('Upload failed with status:', response.status, 'Error:', errorText);
         throw new Error(errorText || `Upload failed with status ${response.status}`);
       }
-      
+
       const result = await response.json();
       // console.log('Upload successful. Response:', result);
-      
+
       // Match the response structure from Cloudinary
       const imageUrl = result.secure_url || result.url;
       const imageKey = result.public_id || result.key;
-      
+
       if (!imageUrl || !imageKey) {
-        console.error('Invalid Cloudinary response:', result);
+        // console.error('Invalid Cloudinary response:', result);
         throw new Error('Invalid response from Cloudinary: missing URL or key');
       }
-      
+
       const newProfileImage = {
         url: imageUrl,
         key: imageKey
       };
-      
+
       // Update the rows state with final image
-      setRows(prevRows => 
-        prevRows.map((row, i) => 
-          i === rowIdx 
-            ? { 
-                ...row, 
-                profileImage: newProfileImage,
-                uploadingProfile: false
-              } 
+      setRows(prevRows =>
+        prevRows.map((row, i) =>
+          i === rowIdx
+            ? {
+              ...row,
+              profileImage: newProfileImage,
+              uploadingProfile: false
+            }
             : row
         )
       );
-      
+
       // Update image modal state if open
       if (imageModal.open && imageModal.rowIndex === rowIdx) {
         setImageModal(prev => ({
@@ -222,18 +223,18 @@ const QuantityManagement = ({ productData, productId }) => {
           }
         }));
       }
-      
+
       // console.log('Profile image updated in state');
       toast.success('Profile image uploaded successfully');
     } catch (error) {
-      console.error('Error in profile image upload:', error);
+      // console.error('Error in profile image upload:', error);
       toast.error(`Upload failed: ${error.message || 'Unknown error'}`);
-      
+
       // Reset uploading state on error
-      setRows(prevRows => 
-        prevRows.map((row, i) => 
-          i === rowIdx 
-            ? { ...row, uploadingProfile: false } 
+      setRows(prevRows =>
+        prevRows.map((row, i) =>
+          i === rowIdx
+            ? { ...row, uploadingProfile: false }
             : row
         )
       );
@@ -246,35 +247,33 @@ const QuantityManagement = ({ productData, productId }) => {
       // console.log('No files selected');
       return;
     }
-    
 
-    
     // Create preview URLs
     const previews = files.map(file => ({
       url: URL.createObjectURL(file),
       key: `preview-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       isPreview: true
     }));
-    
+
     // Reset file input
     event.target.value = '';
-    
+
     // Set uploading state with previews
-    setRows(prevRows => 
-      prevRows.map((row, i) => 
-        i === rowIdx 
-          ? { 
-              ...row, 
-              uploadingSubImages: true,
-              subImages: [
-                ...(row.subImages || []),
-                ...previews
-              ]
-            } 
+    setRows(prevRows =>
+      prevRows.map((row, i) =>
+        i === rowIdx
+          ? {
+            ...row,
+            uploadingSubImages: true,
+            subImages: [
+              ...(row.subImages || []),
+              ...previews
+            ]
+          }
           : row
       )
     );
-    
+
     // Update modal state if open
     if (imageModal.open && imageModal.rowIndex === rowIdx) {
       setImageModal(prev => ({
@@ -289,56 +288,56 @@ const QuantityManagement = ({ productData, productId }) => {
         }
       }));
     }
-    
+
     try {
       // console.log('Starting upload of', files.length, 'files...');
       const uploadPromises = files.map((file, index) => {
         // console.log(`Uploading file ${index + 1}/${files.length}:`, file.name);
         const formData = new FormData();
         formData.append('file', file);
-        
+
         return fetch('/api/cloudinary', {
           method: 'POST',
           body: formData,
         })
-        .then(async response => {
-          // console.log(`File ${index + 1} upload response status:`, response.status);
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error(`Upload failed for ${file.name}:`, errorText);
-            throw new Error(`Failed to upload ${file.name}: ${errorText}`);
-          }
-          return response.json();
-        })
-        .then(result => {
-          // console.log(`File ${index + 1} upload successful:`, result.public_id);
-          return result;
-        });
+          .then(async response => {
+            // console.log(`File ${index + 1} upload response status:`, response.status);
+            if (!response.ok) {
+              const errorText = await response.text();
+              // console.error(`Upload failed for ${file.name}:`, errorText);
+              throw new Error(`Failed to upload ${file.name}: ${errorText}`);
+            }
+            return response.json();
+          })
+          .then(result => {
+            // console.log(`File ${index + 1} upload successful:`, result.public_id);
+            return result;
+          });
       });
-      
+
       // console.log('Waiting for all uploads to complete...');
       const results = await Promise.all(uploadPromises);
       // console.log('All uploads completed successfully. Results:', results);
-      
+
       // Process the results to handle both response formats
       const newSubImages = results.map(result => ({
         url: result.secure_url || result.url,
         key: result.public_id || result.key
       }));
-      
+
       // console.log('Processed new sub-images:', newSubImages);
-      
+
       // Update the rows state with the new images
       setRows(prevRows => {
         const currentRow = prevRows[rowIdx];
         // console.log('Current row data before update:', JSON.stringify(currentRow, null, 2));
-        
+
         // Filter out any preview images before adding the new uploaded ones
         const existingImages = (currentRow.subImages || []).filter(img => !img.isPreview);
-        
+
         const updatedRows = prevRows.map((row, i) => {
           if (i === rowIdx) {
-            const updatedRow = { 
+            const updatedRow = {
               ...row,
               // Keep only non-preview images and add the newly uploaded ones
               subImages: [
@@ -352,14 +351,14 @@ const QuantityManagement = ({ productData, productId }) => {
           }
           return row;
         });
-        
+
         // Update image modal state if open
         if (imageModal.open && imageModal.rowIndex === rowIdx) {
           setImageModal(prev => {
             const currentVariant = prev.variant;
             // Filter out any preview images before adding the new uploaded ones
             const existingImages = (currentVariant.subImages || []).filter(img => !img.isPreview);
-            
+
             const updatedVariant = {
               ...currentVariant,
               // Keep only non-preview images and add the newly uploaded ones
@@ -369,30 +368,28 @@ const QuantityManagement = ({ productData, productId }) => {
               ],
               uploadingSubImages: false
             };
-            
-        
-            
+
             return {
               ...prev,
               variant: updatedVariant
             };
           });
         }
-        
+
         return updatedRows;
       });
-      
+
       // console.log('Sub-images updated in state');
       toast.success(`${results.length} image(s) uploaded successfully`);
     } catch (error) {
-      console.error('Error in sub-images upload:', error);
+      // console.error('Error in sub-images upload:', error);
       toast.error(`Upload failed: ${error.message || 'Unknown error'}`);
-      
+
       // Reset uploading state on error
-      setRows(prevRows => 
-        prevRows.map((row, i) => 
-          i === rowIdx 
-            ? { ...row, uploadingSubImages: false } 
+      setRows(prevRows =>
+        prevRows.map((row, i) =>
+          i === rowIdx
+            ? { ...row, uploadingSubImages: false }
             : row
         )
       );
@@ -402,7 +399,7 @@ const QuantityManagement = ({ productData, productId }) => {
   const removeProfileImage = async (rowIdx) => {
     const row = rows[rowIdx];
     if (!row?.profileImage?.key) return;
-    
+
     try {
       // Delete from Cloudinary
       await fetch('/api/cloudinary', {
@@ -410,16 +407,16 @@ const QuantityManagement = ({ productData, productId }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publicId: row.profileImage.key })
       });
-      
+
       // Update state
-      const updatedRows = rows.map((row, i) => 
-        i === rowIdx 
-          ? { ...row, profileImage: null } 
+      const updatedRows = rows.map((row, i) =>
+        i === rowIdx
+          ? { ...row, profileImage: null }
           : row
       );
-      
+
       setRows(updatedRows);
-      
+
       // Update image modal state if open
       if (imageModal.open && imageModal.rowIndex === rowIdx) {
         setImageModal(prev => ({
@@ -427,14 +424,14 @@ const QuantityManagement = ({ productData, productId }) => {
           variant: updatedRows[rowIdx]
         }));
       }
-      
+
       toast.success('Profile image removed');
     } catch (error) {
-      console.error('Error deleting image:', error);
+      // console.error('Error deleting image:', error);
       toast.error('Failed to delete image');
     }
   };
-  
+
   const removeSubImage = async (rowIdx, imgIdx, imgKey) => {
     try {
       if (imgKey) {
@@ -444,24 +441,24 @@ const QuantityManagement = ({ productData, productId }) => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ publicId: imgKey })
         });
-        
+
         if (!response.ok) {
           const error = await response.text();
           throw new Error(`Failed to delete image: ${error}`);
         }
       }
-      
+
       // Update state using functional update to ensure we have the latest state
       setRows(prevRows => {
-        const updatedRows = prevRows.map((row, i) => 
-          i === rowIdx 
-            ? { 
-                ...row, 
-                subImages: (row.subImages || []).filter((_, idx) => idx !== imgIdx)
-              } 
+        const updatedRows = prevRows.map((row, i) =>
+          i === rowIdx
+            ? {
+              ...row,
+              subImages: (row.subImages || []).filter((_, idx) => idx !== imgIdx)
+            }
             : row
         );
-        
+
         // Update image modal state if open
         if (imageModal.open && imageModal.rowIndex === rowIdx) {
           setImageModal(prev => ({
@@ -472,23 +469,24 @@ const QuantityManagement = ({ productData, productId }) => {
             }
           }));
         }
-        
+
         return updatedRows;
       });
-      
+
       toast.success('Image removed successfully');
     } catch (error) {
-      console.error('Error removing sub-image:', error);
+      // console.error('Error removing sub-image:', error);
       toast.error(error.message || 'Failed to remove image');
     }
   };
 
   const handleAddRow = () => {
-    setRows(rows => [...rows, { 
-      size: '', 
-      price: '', 
-      qty: '', 
-      color: '', 
+    setRows(rows => [...rows, {
+      size: '',
+      price: '',
+      qty: '',
+      vendorPrice: '',
+      color: '',
       weight: '',
       profileImage: null,
       subImages: [],
@@ -502,14 +500,14 @@ const QuantityManagement = ({ productData, productId }) => {
   const [viewDialog, setViewDialog] = useState({ open: false, data: null });
   const [editMode, setEditMode] = useState(false);
   const [deleteDialog, setDeleteDialog] = useState({ open: false, id: null });
-  
+
   // State for image management modal
   const [imageModal, setImageModal] = useState({
     open: false,
     rowIndex: null,
     variant: null
   });
-  
+
   // Open image management modal
   const openImageModal = (rowIndex) => {
     // Make sure we're using the latest row data
@@ -523,19 +521,10 @@ const QuantityManagement = ({ productData, productId }) => {
       return prevRows;
     });
   };
-  
+
   // Close image management modal
   const closeImageModal = () => {
     setImageModal({ open: false, rowIndex: null, variant: null });
-  };
-  
-  // Update variant images after modal operations
-  const updateVariantImages = (rowIndex, updatedVariant) => {
-    setRows(prevRows => 
-      prevRows.map((row, i) => 
-        i === rowIndex ? updatedVariant : row
-      )
-    );
   };
 
   // Fetch quantity records for the current product only
@@ -562,7 +551,7 @@ const QuantityManagement = ({ productData, productId }) => {
     setSaving(true);
     try {
       // console.log('Submitting form with rows:', JSON.stringify(rows, null, 2));
-      
+
       const variants = rows.map(row => {
         // Ensure size is a string (not an object) before sending to the server
         let sizeValue = row.size;
@@ -576,13 +565,14 @@ const QuantityManagement = ({ productData, productId }) => {
         if (row.weight !== '' && !isNaN(row.weight)) {
           weightValue = (Number(row.weight) / 1000).toFixed(3);
         }
-        
+
         // Process images - ensure we're sending the correct structure
         const variantData = {
           size: sizeValue,
           color: row.color,
           price: Number(row.price),
           qty: Number(row.qty),
+          vendorPrice: Number(row.vendorPrice),
           weight: Number(weightValue),
           optional: false,
           // Include both the new structure (images) and the old structure (for backward compatibility)
@@ -631,18 +621,19 @@ const QuantityManagement = ({ productData, productId }) => {
         const found = sizes.find(s => (typeof s === 'object' ? (s.label === v.size || s.name === v.size) : s === v.size));
         if (found && found._id) sizeValue = found._id;
       }
-      
+
       // Handle images from existing variant data - check both new and legacy formats
       const profileImage = v.images?.profile || v.profileImage || null;
-      const subImages = Array.isArray(v.images?.subImages) ? v.images.subImages : 
-                       (Array.isArray(v.subImages) ? v.subImages : []);
-      
+      const subImages = Array.isArray(v.images?.subImages) ? v.images.subImages :
+        (Array.isArray(v.subImages) ? v.subImages : []);
+
       return {
         size: sizeValue || '',
         price: v.price || '',
         qty: v.qty || '',
+        vendorPrice: v.vendorPrice || '',
         color: v.color || '',
-        weight: v.weight ? (Number(v.weight) * 1000): '',
+        weight: v.weight ? (Number(v.weight) * 1000) : '',
         profileImage: profileImage,
         subImages: subImages,
         uploadingProfile: false,
@@ -656,11 +647,11 @@ const QuantityManagement = ({ productData, productId }) => {
   // Cancel edit
   const handleCancelEdit = () => {
     // Clear the form immediately
-    setRows([{ 
-      size: '', 
-      price: '', 
-      qty: '', 
-      color: '', 
+    setRows([{
+      size: '',
+      price: '',
+      qty: '',
+      color: '',
       weight: '',
       profileImage: null,
       subImages: [],
@@ -668,7 +659,7 @@ const QuantityManagement = ({ productData, productId }) => {
       uploadingSubImages: false
     }]);
     setEditMode(false);
-    
+
     // Clean up uploaded images in the background
     const cleanupPromises = rows.flatMap(row => {
       const promises = [];
@@ -681,7 +672,7 @@ const QuantityManagement = ({ productData, productId }) => {
           }).catch(console.error)
         );
       }
-      
+
       if (row.subImages?.length) {
         row.subImages.forEach(img => {
           if (img?.key) {
@@ -697,9 +688,9 @@ const QuantityManagement = ({ productData, productId }) => {
       }
       return promises;
     });
-    
+
     // Don't await the cleanup, let it happen in the background
-    Promise.all(cleanupPromises).catch(console.error);
+    // Promise.all(cleanupPromises).catch(console.error);
   };
 
   // Delete
@@ -739,123 +730,155 @@ const QuantityManagement = ({ productData, productId }) => {
         </div>
         <h5 className="font-semibold mb-2 text-center text-xl">Product Quantity Table</h5>
         <div className="overflow-x-auto">
-          <table className="min-w-full border text-sm">
-            <thead>
-              <tr>
-                <th className="border px-2 py-1 text-center">Size</th>
-                <th className="border px-2 py-1 text-center">Color</th>
-                <th className="border px-2 py-1 text-center">Price</th>
-                <th className="border px-2 py-1 text-center">Quantity</th>
-                <th className="border px-2 py-1 text-center">Weight (g)</th>
-                <th className="border px-2 py-1 text-center">Images</th>
-                <th className="border px-2 py-1 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, idx) => (
-                <tr key={idx}>
-                  <td className="border px-1 py-1"><div className="flex justify-center">
-                    <Select value={row.size ?? ''} onValueChange={val => handleRowChange(idx, 'size', val)}>
-                      <SelectTrigger className="bg-gray-50 rounded border w-24">
-                        <SelectValue placeholder="Select Size"/>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {sizes.map((size, i) => {
-                            let value = typeof size === 'string' ? size : (size._id || size.label || String(i));
-                            let label = typeof size === 'string' ? size : (size.label || size._id || String(value));
-                            return (
-                              <SelectItem key={value} value={String(value)}>{label}</SelectItem>
-                            );
-                          })}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div></td>
+          <div className="space-y-2">
+            {rows.map((row, idx) => (
+              <div key={idx} className="border rounded-lg p-3 bg-white shadow-sm">
+                {/* First Row */}
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  {/* Left Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-24 font-medium">Size:</span>
+                      <Select value={row.size ?? ''} onValueChange={val => handleRowChange(idx, 'size', val)}>
+                        <SelectTrigger className="bg-gray-50 rounded border w-full">
+                          <SelectValue placeholder="Select Size" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {sizes.map((size, i) => {
+                              let value = typeof size === 'string' ? size : (size._id || size.label || String(i));
+                              let label = typeof size === 'string' ? size : (size.label || size._id || String(value));
+                              return (
+                                <SelectItem key={value} value={String(value)}>{label}</SelectItem>
+                              );
+                            })}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="w-24 font-medium">Color:</span>
+                      <Select value={row.color ?? ''} onValueChange={val => handleRowChange(idx, 'color', val)}>
+                        <SelectTrigger className="bg-gray-50 rounded border w-full">
+                          <SelectValue placeholder="Select Color" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectGroup>
+                            {allColors.map((c, i) => {
+                              let value = typeof c === 'string' ? c : (c.hex || c.name || String(i));
+                              let label = typeof c === 'string' ? c : (c.name || c.hex || String(value));
+                              return (
+                                <SelectItem key={value} value={String(value)}>{label}</SelectItem>
+                              );
+                            })}
+                          </SelectGroup>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
 
-                  <td className="border px-1 py-1"><div className="flex justify-center">
-                    <Select value={row.color ?? ''} onValueChange={val => handleRowChange(idx, 'color', val)}>
-                      <SelectTrigger className="bg-gray-50 rounded border w-24">
-                        <SelectValue placeholder="Select Color" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {allColors.map((c, i) => {
-                            let value = typeof c === 'string' ? c : (c.hex || c.name || String(i));
-                            let label = typeof c === 'string' ? c : (c.name || c.hex || String(value));
-                            return (
-                              <SelectItem key={value} value={String(value)}>{label}</SelectItem>
-                            );
-                          })}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </div></td>
-                  <td className="border px-1 py-1"><div className="flex justify-center">
+                  {/* Right Section */}
+                  <div className="space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-24 font-medium">Price:</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="bg-gray-100 rounded"
+                        placeholder="Set Price"
+                        value={row.price ?? ''}
+                        onChange={e => handleRowChange(idx, 'price', e.target.value)}
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="w-24 font-medium">Vendor Price:</span>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="bg-gray-100 rounded"
+                        placeholder="Set Vendor Price"
+                        value={row.vendorPrice ?? ''}
+                        onChange={e => handleRowChange(idx, 'vendorPrice', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Second Row */}
+                <div className="grid grid-cols-2 gap-4 items-center">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-24 font-medium">Quantity:</span>
                     <Input
                       type="number"
                       min={0}
-                      className="w-32 bg-gray-100 rounded"
-                      placeholder="Set Price"
-                      value={row.price ?? ''}
-                      onChange={e => handleRowChange(idx, 'price', e.target.value)}
-                    />
-                  </div></td>
-                  <td className="border px-2 py-1"><div className="flex justify-center">
-                    <Input
-                      type="number"
-                      min={0}
-                      className="w-24 bg-gray-50 rounded"
+                      className="bg-gray-50 rounded"
                       placeholder="Qty"
                       value={row.qty ?? ''}
                       onChange={e => handleRowChange(idx, 'qty', e.target.value)}
                     />
-                  </div></td>
-                  <td className="border px-2 py-1"><div className="flex justify-center">
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="w-24 font-medium">Weight (g):</span>
                     <Input
                       type="number"
                       min={0}
-                      className="w-24 bg-gray-50 rounded"
+                      className="bg-gray-50 rounded"
                       placeholder="Weight"
                       value={row.weight ?? ''}
                       onChange={e => handleRowChange(idx, 'weight', e.target.value)}
                     />
-                  </div></td>
-                  <td className="border px-2 py-1">
+                  </div>
+
+                </div>
+                <div className="grid grid-cols-2 gap-4 items-center py-2 w-full" >
+                  <div className="flex items-center justify-between">
+                    <span className="w-24 font-medium">Upload Images:</span>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-2 w-full py-2"
                       onClick={() => openImageModal(idx, row)}
                     >
                       <ImageIcon className="h-4 w-4" />
-                      <span>Manage Images</span>
+                      <span>Upload Images</span>
                       {(row.profileImage || (row.subImages?.length > 0)) && (
                         <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full h-5 w-5 flex items-center justify-center">
                           {row.profileImage ? 1 : 0 + (row.subImages?.length || 0)}
                         </span>
                       )}
                     </Button>
-                  </td>
-                  <td className="border px-2 py-1 text-center">
-                    <div className="flex justify-center gap-2">
-                      {idx === rows.length - 1 && (
-                        <Button type="button" className="bg-green-500 font-bold px-3 py-1 flex items-center justify-center gap-1" onClick={handleAddRow}>
-                          <Plus size={18} />
-                        </Button>
-                      )}
-                      {rows.length > 1 && (
-                        <Button type="button" className="bg-red-500 font-bold px-3 py-1 flex items-center justify-center" onClick={() => handleRemoveRow(idx)}>
-                          <Trash2 size={18} />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="flex space-x-2 items-end justify-end">
+                    {idx === rows.length - 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-green-600 border-green-300 hover:bg-green-50"
+                        onClick={handleAddRow}
+                      >
+                        <Plus size={18} />
+                      </Button>
+                    )}
+                    {rows.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-300 hover:bg-red-50"
+                        onClick={() => handleRemoveRow(idx)}
+                      >
+                        <Trash2 size={18} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            ))}
+          </div>
         </div>
         <div className="flex justify-center gap-4 mt-4">
           <Button type="submit" className="bg-red-500 font-bold px-5" disabled={saving}>{editMode ? 'Update' : 'Data Save'}</Button>
@@ -910,6 +933,7 @@ const QuantityManagement = ({ productData, productId }) => {
                                   <span className="bg-gray-200 rounded px-2 py-1 font-medium">Size: {sizeLabel}</span>
                                   <span className="bg-blue-100 rounded px-2 py-1 font-medium">Price: ₹{v.price}</span>
                                   <span className="bg-green-100 rounded px-2 py-1 font-medium">Qty: {v.qty}</span>
+                                  <span className="bg-green-100 rounded px-2 py-1 font-medium">Vendor Price: ₹{v.vendorPrice}</span>
                                   <span className="bg-yellow-100 rounded px-2 py-1 font-medium">Color: {v.color}</span>
                                   <span className="bg-yellow-100 rounded px-2 py-1 font-medium">Weight: {Math.round(v.weight * 1000)}g</span>
                                 </div>
@@ -953,11 +977,11 @@ const QuantityManagement = ({ productData, productId }) => {
     <div className="flex flex-col items-center w-full">
       {form}
       {table}
-      
+
       {/* Image Management Modal */}
       <Dialog open={imageModal.open} onOpenChange={closeImageModal}>
-        <DialogContent 
-          className="max-w-3xl" 
+        <DialogContent
+          className="max-w-3xl"
           onInteractOutside={(e) => {
             // Prevent closing when clicking outside
             e.preventDefault();
@@ -974,18 +998,18 @@ const QuantityManagement = ({ productData, productId }) => {
                 <>
                   <span>Variant: </span>
                   {imageModal.variant.color && (
-                    <span 
-                      className="inline-block h-8 w-8 rounded-full border border-gray-300" 
+                    <span
+                      className="inline-block h-8 w-8 rounded-full border border-gray-300"
                       style={{ backgroundColor: imageModal.variant.color }}
                       title={imageModal.variant.color}
                     />
                   )}
-                
+
                   <span> - </span>
                   <span className='font-medium text-xl'>
                     {Array.isArray(sizes) ? (
-                      sizes.find(s => s._id === imageModal.variant.size)?.label || 
-                      sizes.find(s => s.label === imageModal.variant.size)?.label || 
+                      sizes.find(s => s._id === imageModal.variant.size)?.label ||
+                      sizes.find(s => s.label === imageModal.variant.size)?.label ||
                       imageModal.variant.size
                     ) : imageModal.variant.size}
                   </span>
@@ -993,7 +1017,7 @@ const QuantityManagement = ({ productData, productId }) => {
               )}
             </DialogDescription>
           </DialogHeader>
-          
+
           {imageModal.variant && (
             <div className="space-y-6">
               {/* Profile Image Section */}
@@ -1012,7 +1036,7 @@ const QuantityManagement = ({ productData, productId }) => {
                                 fill
                                 className="rounded-md object-cover"
                                 onError={(e) => {
-                                  console.error('Error loading profile image:', imageModal.variant.profileImage?.url);
+                                  // console.error('Error loading profile image:', imageModal.variant.profileImage?.url);
                                   e.target.src = '/placeholder.jpeg';
                                 }}
                               />
@@ -1085,7 +1109,7 @@ const QuantityManagement = ({ productData, productId }) => {
                   )}
                 </div>
               </div>
-              
+
               {/* Sub Images Section */}
               <div>
                 <div className="flex justify-between items-center mb-2">
@@ -1111,7 +1135,7 @@ const QuantityManagement = ({ productData, productId }) => {
                     ) : 'Add Images'}
                   </Button>
                 </div>
-                
+
                 {imageModal.variant.subImages?.length > 0 ? (
                   <div className="max-h-[200px] overflow-y-auto pr-2">
                     <div className="grid grid-cols-3 gap-4">
@@ -1127,7 +1151,7 @@ const QuantityManagement = ({ productData, productId }) => {
                                     fill
                                     className="rounded-md object-cover"
                                     onError={(e) => {
-                                      console.error('Error loading sub-image:', img.url);
+                                      // console.error('Error loading sub-image:', img.url);
                                       e.target.src = '/placeholder.jpeg';
                                     }}
                                   />
@@ -1165,7 +1189,7 @@ const QuantityManagement = ({ productData, productId }) => {
               </div>
             </div>
           )}
-          
+
           <DialogFooter>
             <Button onClick={closeImageModal}>Done</Button>
           </DialogFooter>

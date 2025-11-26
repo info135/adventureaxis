@@ -1,11 +1,9 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import ZipCode from './ZipCode'
 import CreatePrice from './CreatePrice'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 const ShippingCharge = () => {
     const sectionConfig = [
-    { key: 'zip', label: 'Zip Code', component: (props) => <ZipCode {...props} /> },
     { key: 'price', label: 'Price Management', component: (props) => <CreatePrice {...props} /> },
   ];
   const [activeSection, setActiveSection] = useState(sectionConfig[0].key);

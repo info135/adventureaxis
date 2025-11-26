@@ -7,7 +7,7 @@ import NextTopLoader from "nextjs-toploader";
 import { SearchProvider } from "@/context/SearchContext";
 import OverlayButton from "@/components/OverlayButton";
 import GoogleTranslate from "@/components/GoogleTranslate";
-
+import { MenuProvider } from "@/context/MenuProvider";
 
 export const metadata = {
   metadataBase: new URL("https://adventureaxis.com/"),
@@ -32,7 +32,7 @@ export const metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Adventure Axis is an complete outdoor shop.",
-    description:"Adventure Axis is an complete outdoor shop.Adventure Sports Equipment Store 👉 Water Sports Equipment 👉 Safety & Rescue Equipment 👉 Clothing & Footwear 👉 Camping & Outdoor 👉 Expedition GearRaft-Inflatables👉 Apparel, Dry Bag-Boxes, Life Jackets, Frame-Oars, Helmets, Raft Repair – Accessosries, Pumps, Gloves, Dry Wear, Kayaks-Accessories, Paddles, Base Layer, Fleece, Insulation, Leg Wear Safety-Rescue 👉 Rescue Devices, Retractable fall arresters, Ropes & Cords, Carabiner, Traction, Rope Tools",
+    description: "Adventure Axis is an complete outdoor shop.Adventure Sports Equipment Store 👉 Water Sports Equipment 👉 Safety & Rescue Equipment 👉 Clothing & Footwear 👉 Camping & Outdoor 👉 Expedition GearRaft-Inflatables👉 Apparel, Dry Bag-Boxes, Life Jackets, Frame-Oars, Helmets, Raft Repair – Accessosries, Pumps, Gloves, Dry Wear, Kayaks-Accessories, Paddles, Base Layer, Fleece, Insulation, Leg Wear Safety-Rescue 👉 Rescue Devices, Retractable fall arresters, Ropes & Cords, Carabiner, Traction, Rope Tools",
     images: ["/logo.png"],
   },
   other: {
@@ -41,13 +41,29 @@ export const metadata = {
     "viewport": "width=device-width, initial-scale=1",
   },
 };
+// ⭐ 1 Hour Cache (Navbar data won't refetch every page)
+export const revalidate = 3600;
 
+async function getMenuItems() {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_BASE_URL}/api/getAllMenuItems`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) return [];
+    return res.json();
+  } catch (error) {
+    console.error("MenuItems Fetch Error:", error);
+    return [];
+  }
+}
 import { CartProvider } from "../context/CartContext";
 // import CartSyncOnLogin from "../context/CartSyncOnLogin";
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
   const isPaid = process.env.NEXT_PUBLIC_IS_PAID === "true";
-
+  const menuItems = await getMenuItems();
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`font-gilda`}>
@@ -58,13 +74,15 @@ export default function RootLayout({ children }) {
             <SessionWrapper>
               {/* <CartSyncOnLogin /> */}
               <SearchProvider>
-                <Header />
-                {/* <GoogleTranslate /> */}
-                <main>
-                  <OverlayButton />
-                  {children}
-                </main>
-                <Footer />
+                <MenuProvider menuItems={menuItems}>
+                  <Header menuItems={menuItems} />
+                  {/* <GoogleTranslate /> */}
+                  <main>
+                    <OverlayButton />
+                    {children}
+                  </main>
+                  <Footer />
+                </MenuProvider>
               </SearchProvider>
             </SessionWrapper>
           </CartProvider>

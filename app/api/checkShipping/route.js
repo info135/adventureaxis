@@ -48,8 +48,26 @@ export async function POST(request) {
 
     let found = null;
     if (weight !== undefined && weight !== null) {
-      found = mapped.find(tier => weight <= tier.upperLimit);
-      if (!found) found = mapped[mapped.length - 1]; // fallback to highest
+      // Find the correct tier based on weight ranges
+      for (let i = 0; i < mapped.length; i++) {
+        const tier = mapped[i];
+        const nextTier = mapped[i + 1];
+        
+        // If this is the last tier, use it if weight is above its lower bound
+        if (!nextTier) {
+          found = tier;
+          break;
+        }
+        
+        // If weight is less than the next tier's upper limit, use current tier
+        if (weight < nextTier.upperLimit) {
+          found = tier;
+          break;
+        }
+      }
+      
+      // Fallback to highest tier if nothing found
+      if (!found) found = mapped[mapped.length - 1];
     } else {
       found = mapped[0];
     }

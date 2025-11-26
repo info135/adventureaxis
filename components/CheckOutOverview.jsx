@@ -53,7 +53,7 @@ const downloadInvoiceAsPdf = async (orderData) => {
     tempDiv.innerHTML = `
       <div style="max-width: 800px; margin: 0 auto; padding: 24px; background: #fff; border-radius: 10px; font-family: Arial, sans-serif;">
         <div style="text-align: center; margin-bottom: 24px;">
-          <img src="/logo.png" alt="Rishikesh Handmade" style="max-height: 80px; margin-bottom: 16px;">
+          <img src="/logo.png" alt="Adventure Axis" style="max-height: 80px; margin-bottom: 16px;">
           <h1 style="margin: 0; color: #333; font-size: 24px;">INVOICE</h1>
           <p style="margin: 8px 0 0; color: #666;">Order #${orderId}</p>
           <p style="margin: 4px 0 0; color: #666;">${new Date(orderDate).toLocaleDateString()}</p>
@@ -163,7 +163,7 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
   // In your component, use it like this:
   const handleDownloadInvoice = () => {
     if (!checkoutData) return;
-  
+
     const orderData = {
       orderId: orderId || `ORD-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
       orderDate: new Date().toISOString(),
@@ -179,13 +179,14 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
         image: item.image?.url || item.image || ''
       })),
       subTotal: checkoutData.subTotal || 0,
+      shippingCost: checkoutData.shippingCost || 0,
+      finalShipping: checkoutData.finalShipping || 0,
       totalDiscount: checkoutData.totalDiscount || 0,
       promoCode: checkoutData.promoCode || '',
-      totalTax: checkoutData.taxTotal || checkoutData.totalTax || '', // Changed from totalTax to taxTotal based on your data
-      shippingCost: checkoutData?.shippingCost || checkoutData?.shipping || 0,
+      totalTax: checkoutData.totalTax || taxTotal,
       cartTotal: checkoutData.cartTotal || 0
     };
-  
+
     downloadInvoiceAsPdf(orderData);
   };
   if (!checkoutData) {
@@ -200,6 +201,7 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
   const {
     cart: items = [],
     subTotal = 0,
+    shippingCost = 0,
     totalDiscount = 0,
     promo,
     finalShipping = 0,
@@ -250,7 +252,7 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
                 Download Invoice
               </button>
               <button
-              className="w-fit bg-black hover:bg-gray-800 text-white font-medium py-2 px-4 rounded-md transition duration-200 mb-4 flex items-center justify-center"
+                className="w-fit bg-black hover:bg-gray-800 text-white font-medium py-2 px-4 rounded-md transition duration-200 mb-4 flex items-center justify-center"
 
                 onClick={onGoToDashboard}
               >
@@ -280,7 +282,7 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
                 <tr><td className="py-1 w-32 text-gray-700">Name</td><td>{firstName} {lastName}</td></tr>
                 <tr><td className="py-1 text-gray-700">Email</td><td>{email}</td></tr>
                 <tr><td className="py-1 text-gray-700">Call No.</td><td>{phone}</td></tr>
-                <tr><td className="py-1 text-gray-700">Alt. Call No.</td><td>{altPhone}</td></tr>
+                {altPhone && <tr><td className="py-1 text-gray-700">Alt. Call No.</td><td>{altPhone}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -304,9 +306,10 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
             </div>
             <table className="w-full text-sm">
               <tbody>
+                <tr><td className="py-1 w-32 text-gray-700">City</td><td>{city}</td></tr>
+                <tr><td className="py-1 text-gray-700">District</td><td>{district}</td></tr>
                 <tr><td className="py-1 w-32 text-gray-700">State</td><td>{state}</td></tr>
-                <tr><td className="py-1 text-gray-700">Dist.</td><td>{district}</td></tr>
-                <tr><td className="py-1 text-gray-700">Available Pin Code</td><td>{pincode}</td></tr>
+                <tr><td className="py-1 text-gray-700">Pin Code</td><td>{pincode}</td></tr>
               </tbody>
             </table>
           </div>
@@ -328,6 +331,10 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
                 <span>₹{subTotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm">
+                <span>Shipping</span>
+                <span>₹{finalShipping || shippingCost.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
                 <span className="underline cursor-pointer">GST and Fees</span>
                 <span>₹{taxTotal.toFixed(2)}</span>
               </div>
@@ -338,6 +345,10 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
               {totalDiscount > 0 && (
                 <div className="text-green-700 text-xs mt-2">Nice! You saved ₹{totalDiscount.toFixed(2)} on your order.</div>
               )}
+            </div>
+            <div className="text-xs text-gray-600 mt-2">
+              Thank you for choosing to shop with us!<br />
+              Your satisfaction is our priority – shop confidently with us!
             </div>
             <button
               className="w-full py-3 bg-black text-white rounded font-semibold text-base mt-2 mb-4 flex items-center justify-center gap-2 hover:bg-gray-900 transition-colors"
@@ -356,11 +367,6 @@ const CheckOutOverview = ({ checkoutData, paymentMethod, onEdit, onConfirm, load
               )}
             </button>
             {error && <div className="text-red-600 text-xs text-center mb-2">{error}</div>}
-            <div className="text-xs text-gray-600 mt-2">
-              Thank you for choosing to shop with us!<br />
-              To complete your purchase, please confirm your order by selecting a payment method below. You can choose <span className="underline">Cash on Delivery (COD)</span> for a safe and convenient payment at your doorstep, or opt for <span className="underline">Online Payment</span> for faster processing and instant confirmation.<br /><br />
-              Once your payment option is selected, we will begin preparing your order for dispatch. Your satisfaction is our priority – shop confidently with us!
-            </div>
           </div>
         </div>
       </div>

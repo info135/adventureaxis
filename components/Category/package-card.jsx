@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useCart } from "@/context/CartContext"
 import toast from "react-hot-toast"
 import QuickViewProductCard from "../QuickViewProductCard";
+import { useSession } from "next-auth/react"
 const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, handleAddToCart }) => {
   // console.log(pkg)
   // If not passed as prop, fallback to context
@@ -18,6 +19,10 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const isWishlisted = wishlist?.some?.(i => i.id === pkg._id)
   const formatNumber = (number) => new Intl.NumberFormat('en-IN').format(number)
+  const { data: session } = useSession()
+  const isVendor = session?.user?.isVendor;
+  const vendorPrice = pkg?.vendorPrice;
+
   // Prevent background scroll when Quick View is open
   useEffect(() => {
     if (quickViewProduct) {
@@ -29,7 +34,7 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
   }, [quickViewProduct]);
 
   return (
-    <div className="flex flex-col max-w-80 rounded-3xl group cursor-pointer">
+    <div className="flex flex-col w-72 rounded-3xl group cursor-pointer">
       {/* Image Section */}
       <div className="relative w-full md:h-92 rounded-3xl overflow-hidden flex items-center justify-center group/image border border-gray-300">
         {/* GET 10% OFF Tag */}
@@ -79,11 +84,11 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
       <div className="flex flex-col items-start justify-between px-2 py-4 mt-0">
         <Link
           href={`/product/${pkg.slug}`}
-          className="font-bold hover:underline text-[15px] md:text-[18px] text-black leading-tight break-words whitespace-normal truncate cursor-pointer"
+          className="font-bold hover:underline text-[18px] text-black leading-tight break-words whitespace-normal truncate cursor-pointer"
         >
           {pkg?.title}
         </Link>
-        <div className="flex items-center gap-5 justify-between">
+        <div className="flex items-center justify-between w-full">
 
 
           {(() => {
@@ -103,16 +108,28 @@ const PackageCard = ({ pkg, wishlist = [], addToWishlist, removeFromWishlist, ha
               discountedPrice = price;
               hasDiscount = true;
             }
-            if (hasDiscount && discountedPrice < originalPrice) {
+            if (isVendor && vendorPrice) {
+              // Show vendor price if user is a vendor and vendor price exists
+              return (
+                <span className="font-semibold text-[18px] text-black">
+                  ₹{formatNumber(vendorPrice)}
+                  {isVendor && <span className="text-xs text-black px-1">(B2B Price)</span>}
+                </span>
+              );
+            } else if (hasDiscount && discountedPrice < originalPrice) {
+              // Show discounted price for non-vendors or when no vendor price is set
               return (
                 <span>
-                  <span className="font-semibold text-[15px] md:text-[18px] text-black px-2">₹{formatNumber(Math.round(discountedPrice))}</span>
-                  <del className="text-black font-semibold text-[15px] md:text-[18px] mr-2">₹{formatNumber(originalPrice)}</del>
+                  <span className="font-semibold text-[18px] text-black px-2">₹{formatNumber(Math.round(discountedPrice))}</span>
+                  <del className="text-black font-semibold text-[18px] mr-2">₹{formatNumber(originalPrice)}</del>
                 </span>
               );
             } else {
+              // Default to regular price
               return (
-                <span className="font-semibold text-[15px] md:text-[18px] text-black">₹{formatNumber(price)}</span>
+                <span className="font-semibold text-[18px] text-black">₹{formatNumber(price)}
+
+                </span>
               );
             }
           })()}
